@@ -6,7 +6,19 @@
 
 Open a log, change a config, or clean up a whole folder of files. Margin puts the familiar menu bar and tabs up front, and keeps encoding, line endings, and unsaved changes visible while you work. Use it offline on Windows, macOS, or Linux.
 
-[Download Margin](https://github.com/peterwangze/margin-editor/releases) · [Design and architecture](docs/architecture.md) · [Release acceptance checklist](docs/acceptance.md)
+[All releases](https://github.com/peterwangze/margin-editor/releases) · [Design and architecture](docs/architecture.md) · [Release acceptance checklist](docs/acceptance.md)
+
+## Download Margin 0.9.0
+
+Choose the offline package for your operating system and processor. This version is a public prerelease.
+
+| Platform | Intel / AMD 64-bit | ARM64 |
+| --- | --- | --- |
+| Windows | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-x64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-x64-portable.exe) | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-arm64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-arm64-portable.exe) |
+| macOS | [DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-x64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-x64.zip) | [Apple Silicon DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-arm64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-arm64.zip) |
+| Linux | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-x86_64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-amd64.deb) | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-arm64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-arm64.deb) |
+
+[Release notes and assets](https://github.com/peterwangze/margin-editor/releases/tag/v0.9.0) · [SHA-256 checksums](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/SHA256SUMS.txt)
 
 ![Margin's Ink workbench with a folder sidebar, tabs, syntax highlighting, and an interactive status bar](docs/screenshots/workbench.png)
 
@@ -19,9 +31,7 @@ Open a log, change a config, or clean up a whole folder of files. Margin puts th
 
 ![In-document Find and Replace with a highlighted match and accessible controls](docs/screenshots/find.png)
 
-## Get Margin
-
-Download a standalone package from [GitHub Releases](https://github.com/peterwangze/margin-editor/releases). Choose `x64` for a 64-bit Intel or AMD system, or `arm64` for Apple Silicon and other ARM64 systems.
+## Install offline
 
 | Platform | Offline packages | How to start |
 | --- | --- | --- |

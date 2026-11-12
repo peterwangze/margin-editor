@@ -1,3 +1,13 @@
+## Offline downloads / 离线安装包
+
+| Platform | Intel / AMD 64-bit | ARM64 |
+| --- | --- | --- |
+| Windows | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-x64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-x64-portable.exe) | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-arm64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-arm64-portable.exe) |
+| macOS | [DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-x64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-x64.zip) | [Apple Silicon DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-arm64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-arm64.zip) |
+| Linux | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-x86_64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-amd64.deb) | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-arm64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-arm64.deb) |
+
+[SHA-256 checksums](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/SHA256SUMS.txt)
+
 Margin 0.9.0 brings a local text workbench to Windows, macOS, and Linux. Open files into the Ink or Paper interface, split or clone documents, and pick up unsaved work from the previous session.
 
 - Find and replace within a document, or review folder-wide replacements before applying selected files.
