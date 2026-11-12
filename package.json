@@ -1,0 +1,98 @@
+{
+  "name": "margin-editor",
+  "version": "0.9.0",
+  "description": "A local-first desktop text editor for Windows, macOS and Linux",
+  "author": "peterwangze",
+  "license": "MIT",
+  "main": "desktop/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "start": "electron .",
+    "build": "vite build",
+    "test": "node --test tests/core.test.mjs",
+    "test:ui": "playwright test tests/editor.spec.js",
+    "test:desktop": "node --test tests/desktop.test.mjs",
+    "package": "electron-builder --publish never"
+  },
+  "build": {
+    "appId": "io.github.peterwangze.margin",
+    "productName": "Margin",
+    "artifactName": "Margin-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "desktop/**",
+      "shared/**",
+      "package.json",
+      "LICENSE"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signAndEditExecutable": false,
+      "icon": "assets/margin.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Margin-${version}-win-${arch}-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "Margin-${version}-win-${arch}-portable.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools",
+      "identity": "-",
+      "icon": "assets/margin.png"
+    },
+    "linux": {
+      "executableName": "margin",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility;TextEditor",
+      "maintainer": "Margin contributors <peterwangze@users.noreply.github.com>",
+      "icon": "assets/margin.png"
+    }
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.4",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/language-data": "^6.5.2",
+    "@codemirror/merge": "^6.12.3",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/instrument-sans": "^5.3.0",
+    "@lezer/highlight": "^1.2.5",
+    "codemirror": "^6.0.2",
+    "diff": "^9.0.0",
+    "dompurify": "^3.4.17",
+    "iconv-lite": "^0.7.3",
+    "lucide-react": "^1.72.0",
+    "marked": "^18.2.0",
+    "minimatch": "^11.0.8",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.3.1",
+    "electron-builder": "^26.18.0",
+    "vite": "^8.3.8"
+  }
+}

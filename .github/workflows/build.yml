@@ -1,0 +1,76 @@
+name: Desktop validation and offline packages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: win, arch: x64, runner: windows-2025, smoke: true}
+          - {platform: win, arch: arm64, runner: windows-2025, smoke: false}
+          - {platform: mac, arch: x64, runner: macos-15-intel, smoke: true}
+          - {platform: mac, arch: arm64, runner: macos-15, smoke: true}
+          - {platform: linux, arch: x64, runner: ubuntu-24.04, smoke: true}
+          - {platform: linux, arch: arm64, runner: ubuntu-24.04-arm, smoke: true}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:ui
+      - run: npm run build
+      - name: Build self-contained packages
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run package -- --${{ matrix.platform }} --${{ matrix.arch }}
+      - name: Smoke test the built application
+        if: matrix.smoke
+        run: |
+          case '${{ matrix.platform }}' in
+            win)
+              export MARGIN_EXECUTABLE="$(cygpath -w "$PWD/release/win-unpacked/Margin.exe")"
+              npm run test:desktop
+              ;;
+            mac)
+              export MARGIN_EXECUTABLE="$(find "$PWD/release" -path '*/Margin.app/Contents/MacOS/Margin' -type f | head -1)"
+              test -x "$MARGIN_EXECUTABLE"
+              npm run test:desktop
+              ;;
+            linux)
+              export MARGIN_EXECUTABLE="$(find "$PWD/release" -path '*/linux*-unpacked/margin' -type f | head -1)"
+              test -x "$MARGIN_EXECUTABLE"
+              xvfb-run -a npm run test:desktop
+              ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Margin-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+          compression-level: 0
