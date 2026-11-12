@@ -41,3 +41,23 @@
 - 48 MiB 以上文件的编辑与全文件搜索、全部平台及架构的离线人工安装、IME、屏幕阅读器、高对比度和签名验证。
 
 安装包的 CI 通过表示已生成工件，带 Smoke 步骤的架构还验证了包内应用的真实编辑与磁盘操作。完整安装程序、系统文件关联和卸载用例需要独立证据。
+
+## v0.9.0 执行记录
+
+候选提交 `59318e53159215d80ddc7cac907ee14d8d3f1b4b`。所有六个构建任务通过。[GitHub Actions 运行记录](https://github.com/peterwangze/margin-editor/actions/runs/43221655134)
+
+| 范围 | 状态 | 已观察的结果 |
+| --- | --- | --- |
+| S01–S03 | 通过 | 1536×1024 实际界面与概念图对照，650×540 键盘和溢出检查，查找匹配高亮与反馈通过。 [视觉对照](design/verification.md) |
+| S04 | 通过 | 公开仓库有 About 和 topics。预发行版有 12 个离线包，逐个比对 GitHub 资产摘要与清单中的 SHA-256。 [发行页](https://github.com/peterwangze/margin-editor/releases/tag/v0.9.0) |
+| S05 | 通过 | 生产依赖 `npm audit --omit=dev` 为零已知漏洞，运行时启用渲染进程隔离、CSP、导航限制与固定来源 IPC。 |
+| S06 | 未验证 | 尚无三平台屏幕阅读器、中文 IME、高对比度及 200% 缩放的人工记录。 |
+| I01/I03/I05/I07 | 已执行项通过 | Windows x64 与 Linux x64/arm64 各执行三项桌面集成测试，涵盖 CLI 打开、Unicode 字节落盘、磁盘冲突、关闭后恢复、跨文件替换和混合换行撤销。Windows 的 Unicode 路径还做了实机补验。 |
+| I02/I04/I08/I09/I12 | 已执行项通过 | 五项 Chromium 交互测试通过。Windows 额外实测 Alt 拖选列插入序号、书签、超大文件直接跳到末页、本地工具执行及 SHA-256。六项核心测试涵盖文件事务、搜索、编码、分页和 JSON 词元保留。 |
+| I06/I10 | 部分通过 | 验证 JSON/Markdown、格式化、哈希和扩展搜索。完整 lexer/UDL 迁移与第三方插件 ABI 仍有缺项。 |
+| I11 Windows x64 | 通过 | CI 运行 NSIS 安装、在安装位置通过三项桌面集成测试，并运行卸载和文件清理检查。 |
+| I11 Windows arm64 | 生成通过 | Setup 和便携 EXE 已生成，ARM64 Windows 实机运行未验证。 |
+| I11 macOS x64/arm64 | 包内运行通过 | 生成 DMG/ZIP 后，在对应架构 runner 中启动包内应用，禁止页面 HTTP(S) 请求并通过 CLI 打开、Unicode 编辑、CRLF 写入和查找测试。系统 Gatekeeper 与拖入 Applications 的人工流程未验证。 |
+| I11 Linux x64/arm64 | DEB 包内运行通过 | 从 DEB 提取应用，在 Xvfb 中通过三项桌面集成测试。AppImage 已生成，FUSE 启动与系统包管理器安装/卸载未验证。 |
+
+此记录适用于列出的候选提交、运行环境和用例范围。未覆盖的子项继续保留在发行清单中。
