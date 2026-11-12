@@ -1,7 +1,7 @@
 import {useEffect, useLayoutEffect, useRef} from 'react'
 import {EditorState, Compartment, Annotation, StateEffect, StateField, Transaction, EditorSelection} from '@codemirror/state'
 import {EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightSpecialChars, highlightWhitespace, Decoration, GutterMarker, gutter, placeholder} from '@codemirror/view'
-import {defaultKeymap, history, historyKeymap, indentWithTab} from '@codemirror/commands'
+import {defaultKeymap, history, historyKeymap, indentWithTab, invertedEffects} from '@codemirror/commands'
 import {foldGutter, foldKeymap, bracketMatching, indentOnInput, indentUnit, syntaxHighlighting, HighlightStyle, StreamLanguage} from '@codemirror/language'
 import {closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap} from '@codemirror/autocomplete'
 import {highlightSelectionMatches} from '@codemirror/search'
@@ -24,6 +24,35 @@ export const syncChange = Annotation.define()
 const setMatches = StateEffect.define()
 const setBookmarks = StateEffect.define()
 const setOverwrite = StateEffect.define()
+const setFormat = StateEffect.define()
+const undoFormat = StateEffect.define()
+
+function changesFor(changeSet) {
+  const changes = []
+  changeSet.iterChanges((from, to, _start, _end, insert) => changes.push({from, to, insert: insert.toString()}))
+  return changes
+}
+
+const formatField = StateField.define({
+  create: () => ({eol: 'LF', mixed: null, version: 0}),
+  update(format, tr) {
+    const reset = tr.effects.findLast(effect => effect.is(setFormat))
+    if (reset) return reset.value
+    const restored = tr.effects.findLast(effect => effect.is(undoFormat) && effect.value.version === format.version)
+    if (restored && restored.value.mixed.length === tr.newDoc.lines - 1) return restored.value
+    if (!tr.docChanged || !format.mixed) return format
+    return {...format, mixed: updateMixed(tr.startState.doc.toString(), format.mixed, changesFor(tr.changes), format.eol)}
+  },
+})
+
+const rememberFormat = invertedEffects.of(tr => {
+  const format = tr.startState.field(formatField)
+  return tr.docChanged && format.mixed ? [undoFormat.of(format)] : []
+})
+
+export function syncEditor(view, changes, doc) {
+  view.dispatch({changes, effects: setFormat.of({eol: doc.eol, mixed: doc.mixed, version: doc.formatVersion ?? 0}), annotations: [syncChange.of(true), Transaction.addToHistory.of(false)]})
+}
 
 const searchMarks = StateField.define({
   create: () => Decoration.none,
@@ -103,11 +132,20 @@ export function setEditorBookmarks(view, lines) { view?.dispatch({effects: setBo
 export function toggleOverwrite(view) { if (view) view.dispatch({effects: setOverwrite.of(!view.state.field(overwrite))}) }
 export const isOverwrite = view => view?.state.field(overwrite)
 
+export function focusEditor(view) {
+  if (!view) return
+  const modal = document.querySelector('dialog[open]')
+  if (!modal) { view.focus(); return }
+  requestAnimationFrame(() => {
+    if (view.dom.isConnected && !document.querySelector('dialog[open]')) view.focus()
+  })
+}
+
 export function goTo(view, line, col = 1) {
   if (!view) return
   const target = view.state.doc.line(Math.max(1, Math.min(line || 1, view.state.doc.lines)))
   view.dispatch({selection: {anchor: target.from + Math.max(0, Math.min(col - 1, target.length))}, scrollIntoView: true})
-  view.focus()
+  focusEditor(view)
 }
 
 export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, activate, onScroll, matches, matchIndex}) {
@@ -121,18 +159,15 @@ export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, ac
   useLayoutEffect(() => {
     const {mode, options} = compartments.current
     const saved = cache.current.get(doc.id)
-    const base = saved?.state.doc.toString() === doc.text ? saved.state : EditorState.create({doc: doc.text, selection: {anchor: Math.min(doc.cursor ?? 0, doc.text.length)}, extensions: [
-      history(), drawSelection(), dropCursor(), rectangularSelection(), crosshairCursor(), highlightActiveLine(), syntax, searchMarks, bookmarkField, bookmarksGutter, overwrite, overwriteInput,
+    const base = saved?.epoch === doc.epoch && saved?.state.doc.toString() === doc.text ? saved.state : EditorState.create({doc: doc.text, selection: {anchor: Math.min(doc.cursor ?? 0, doc.text.length)}, extensions: [
+      history(), rememberFormat, formatField.init(() => ({eol: doc.eol, mixed: doc.mixed, version: doc.formatVersion ?? 0})), drawSelection(), dropCursor(), rectangularSelection(), crosshairCursor(), highlightActiveLine(), syntax, searchMarks, bookmarkField, bookmarksGutter, overwrite, overwriteInput,
       placeholder('Start typing…'), EditorState.allowMultipleSelections.of(true), mode.of([]), options.of(editorOptions(settings, doc)),
       keymap.of([indentWithTab, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...foldKeymap, ...completionKeymap]),
       EditorView.updateListener.of(update => {
         const props = current.current
         if (update.docChanged && !update.transactions.some(tr => tr.annotation(syncChange))) {
-          const changes = []
-          update.changes.iterChanges((from, to, _start, _end, insert) => changes.push({from, to, insert: insert.toString()}))
-          const old = props.doc
-          const mixed = old.mixed ? updateMixed(update.startState.doc.toString(), old.mixed, changes, old.eol) : null
-          props.onEdit(slot, old.id, update, changes, mixed, update.state.field(bookmarkField))
+          const changes = changesFor(update.changes)
+          props.onEdit(slot, props.doc.id, update, changes, update.state.field(formatField).mixed, update.state.field(bookmarkField))
         }
         if (update.selectionSet || update.docChanged || update.focusChanged || update.transactions.some(tr => tr.effects.some(effect => effect.is(setOverwrite)))) props.onCursor(slot, props.doc.id, update.view)
       }),
@@ -146,19 +181,19 @@ export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, ac
     const scroll = () => current.current.onScroll(slot, scroller)
     scroller.addEventListener('scroll', scroll, {passive: true})
     return () => {
-      cache.current.set(doc.id, {state: view.state, top: scroller.scrollTop})
+      cache.current.set(doc.id, {state: view.state, top: scroller.scrollTop, epoch: doc.epoch})
       while (cache.current.size > 20) cache.current.delete(cache.current.keys().next().value)
       scroller.removeEventListener('scroll', scroll)
       view.destroy()
       current.current.attach(slot, null, doc.id)
     }
-  }, [doc.id, slot])
+  }, [doc.id, doc.epoch, slot])
 
   useEffect(() => {
     const view = viewRef.current
     if (!view) return
     view.dispatch({effects: compartments.current.options.reconfigure(editorOptions(settings, doc))})
-  }, [doc.id, doc.readOnly, doc.size, settings])
+  }, [doc.id, doc.epoch, doc.readOnly, doc.size, settings])
 
   useEffect(() => {
     const view = viewRef.current
@@ -169,16 +204,18 @@ export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, ac
     else if (mode.load) mode.load().then(apply).catch(() => apply([]))
     else apply(customMode(mode))
     return () => { alive = false }
-  }, [doc.id, doc.name, doc.language, doc.size, settings.languages])
+  }, [doc.id, doc.epoch, doc.name, doc.language, doc.size, settings.languages])
 
   useLayoutEffect(() => {
     const view = viewRef.current
-    if (!view || view.state.doc.toString() === doc.text) return
-    view.dispatch({changes: {from: 0, to: view.state.doc.length, insert: doc.text}, annotations: [syncChange.of(true), Transaction.addToHistory.of(false)]})
-  }, [doc.id, doc.text])
+    if (!view) return
+    const format = view.state.field(formatField)
+    if (view.state.doc.toString() !== doc.text) syncEditor(view, {from: 0, to: view.state.doc.length, insert: doc.text}, doc)
+    else if (format.eol !== doc.eol || format.mixed !== doc.mixed || format.version !== (doc.formatVersion ?? 0)) syncEditor(view, undefined, doc)
+  }, [doc.id, doc.text, doc.eol, doc.mixed, doc.formatVersion])
 
   useEffect(() => { setEditorBookmarks(viewRef.current, doc.bookmarks) }, [doc.id, doc.bookmarks])
-  useEffect(() => { markSearch(viewRef.current, matches, matchIndex) }, [doc.id, matches, matchIndex])
+  useEffect(() => { markSearch(viewRef.current, matches, matchIndex) }, [doc.id, doc.epoch, matches, matchIndex])
 
   return <div ref={host} className="editor-surface" onFocusCapture={() => activate(slot)} aria-label={`Editor pane ${slot === 'main' ? 1 : 2}`} />
 }
@@ -190,5 +227,5 @@ export function insertAtSelections(view, transform) {
     const text = transform(view.state.sliceDoc(range.from, range.to), index++)
     return {changes: {from: range.from, to: range.to, insert: text}, range: EditorSelection.range(range.from, range.from + text.length)}
   }))
-  view.focus()
+  focusEditor(view)
 }

@@ -5,7 +5,7 @@ import {selectNextOccurrence} from '@codemirror/search'
 import {highlightTree, classHighlighter} from '@lezer/highlight'
 import {encodings} from '../shared/text.mjs'
 import {basename, dirname, symbolsFor} from './documents'
-import {goTo, insertAtSelections, toggleOverwrite} from './editor'
+import {focusEditor, goTo, insertAtSelections, toggleOverwrite} from './editor'
 import {definitions, lineTransforms, menus, transforms} from './commands'
 
 const field = (name, label, value, options = {}) => ({name, label, value, ...options})
@@ -18,7 +18,7 @@ export function useCommands(ctx) {
   const setting = data => m.setSettings({...m.settings, ...data})
   const edit = callback => {
     const view = m.selectedView()
-    if (view) callback(view)
+    if (view) { callback(view); focusEditor(view) }
   }
   const alter = callback => edit(view => { if (!view.state.readOnly) callback(view) })
   const textDialog = (label, fields, submit, detail, action) => setDialog({kind: 'fields', label, fields, submit, detail, action})
@@ -73,7 +73,7 @@ export function useCommands(ctx) {
     m.amend(doc.id, item => {
       const next = {encoding: encoding ?? item.encoding, eol: eol ?? item.eol, mixed: eol ? null : item.mixed}
       if (next.encoding === item.encoding && next.eol === item.eol && next.mixed === item.mixed) return {}
-      return {...next, dirty: true}
+      return {...next, dirty: true, formatVersion: (item.formatVersion ?? 0) + Number(Boolean(eol))}
     })
   }
   function bookmark(step) {

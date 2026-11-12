@@ -2,11 +2,10 @@ import {createRoot} from 'react-dom/client'
 import {useDeferredValue, useEffect, useRef, useState} from 'react'
 import {X, AlertTriangle, ChevronDown} from 'lucide-react'
 import {languages} from '@codemirror/language-data'
-import {Transaction} from '@codemirror/state'
 import {Chrome, Activity, Explorer, Tabs, FindBar, Output, FileGlyph, IconButton} from './chrome'
 import {Dialog, Palette, Fields, Settings, WorkspaceSearch, Outline} from './panels'
 import {Companion, DocumentMap} from './Companion'
-import {EditorSurface, goTo, isOverwrite, modeFor, syncChange} from './editor'
+import {EditorSurface, goTo, isOverwrite, modeFor, syncEditor} from './editor'
 import {useDocuments} from './useDocuments'
 import {useFind} from './useFind'
 import {useCommands} from './useCommands'
@@ -179,7 +178,7 @@ function App() {
       return {text, savedText, savedFormat, mixed, bookmarks, dirty: text !== savedText || item.encoding !== savedFormat[0] || item.eol !== savedFormat[1] || (mixed?.join('') ?? null) !== (savedFormat[2]?.join('') ?? null)}
     })
     const other = m.views.current[slot === 'main' ? 'secondary' : 'main']
-    if (other?.id === id && other.view.state.doc.eq(update.startState.doc)) other.view.dispatch({changes: update.changes, annotations: [syncChange.of(true), Transaction.addToHistory.of(false)]})
+    if (other?.id === id && other.view.state.doc.eq(update.startState.doc)) syncEditor(other.view, update.changes, m.docsRef.current.find(item => item.id === id))
     if (recording && recorded.current.length < 1000) {
       const anchor = update.startState.selection.main.head
       recorded.current.push({changes: changes.map(item => ({...item, from: item.from - anchor, to: item.to - anchor})), cursor: update.state.selection.main.head - anchor})

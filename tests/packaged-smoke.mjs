@@ -23,18 +23,26 @@ const child = spawn(executable, [`--remote-debugging-port=${port}`, file], {env:
 const exited = once(child, 'exit').catch(() => {})
 let output = ''
 for (const pipe of [child.stdout, child.stderr]) pipe.on('data', data => { output = (output + data).slice(-10000) })
+const watchdog = setTimeout(() => {
+  child.kill('SIGKILL')
+  console.error(`Packaged application validation timed out.\n${output}`)
+  process.exit(1)
+}, 60000)
 const address = `http://127.0.0.1:${port}`
 let browser
 try {
+  console.log(`Launching packaged ${process.platform}/${process.arch} application`)
   for (let n = 0; n < 100; n++) {
-    if (child.exitCode !== null) throw new Error(`Margin exited with ${child.exitCode}`)
+    if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Margin exited with ${child.exitCode ?? child.signalCode}`)
     try { if ((await fetch(`${address}/json/version`, {signal: AbortSignal.timeout(350)})).ok) break }
     catch { /* Wait for the installed app to bind its debug port. */ }
     await new Promise(resolve => setTimeout(resolve, 180))
   }
   browser = await chromium.connectOverCDP(address, {timeout: 7000})
+  console.log('Connected to the packaged application')
   const context = browser.contexts()[0]
   const page = context.pages()[0] ?? await context.waitForEvent('page', {timeout: 7000})
+  page.setDefaultTimeout(7000)
   await context.route(/^https?:/, route => route.abort())
   await expect(page.getByRole('tab', {name: 'offline.txt', exact: true})).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('button', {name: 'CRLF', exact: true})).toBeVisible()
@@ -56,8 +64,9 @@ try {
   console.error(output)
   throw error
 } finally {
-  await browser?.close().catch(() => {})
-  if (child.exitCode === null) child.kill()
+  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
   await exited
+  await browser?.close().catch(() => {})
   await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  clearTimeout(watchdog)
 }

@@ -7,6 +7,7 @@ import {encode, decode} from '../desktop/codec.mjs'
 import {readDocument, saveDocument, readLargePage, EDIT_LIMIT, PAGE_SIZE} from '../desktop/files.mjs'
 import {searchWorkspace, applyWorkspace} from '../desktop/workspace.mjs'
 import {findMatches, replaceMatches, emptyQuery, newlines, withNewlines, updateMixed, encodings} from '../shared/text.mjs'
+import {formatJsonText} from '../shared/json.mjs'
 
 async function fixture(t) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-tests-'))
@@ -94,4 +95,12 @@ test('F04 large-file pages are bounded and do not split a UTF-8 code point', asy
   assert.ok(two.text.startsWith('🙂\nsecond'))
   assert.equal(two.readOnly, true)
   assert.equal(two.lossy, false)
+})
+
+test('F12 JSON formatting preserves raw numeric and string literals and duplicate keys', () => {
+  const input = '{"x":9007199254740993,"x":1e999,"y":"\\u00e9","z":[{},true]}\n'
+  const expected = '{\n  "x": 9007199254740993,\n  "x": 1e999,\n  "y": "\\u00e9",\n  "z": [\n    {},\n    true\n  ]\n}\n'
+  assert.equal(formatJsonText(input), expected)
+  assert.equal(formatJsonText(expected, 0), input.trim())
+  assert.throws(() => formatJsonText('[1,]'), SyntaxError)
 })

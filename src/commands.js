@@ -1,3 +1,5 @@
+import {formatJsonText} from '../shared/json.mjs'
+
 export const menus = {
   File: ['new', 'open', 'openFolder', 'recent', 'quick', '—', 'save', 'saveAs', 'saveCopy', 'saveAll', 'reload', 'rename', 'reveal', 'trash', '—', 'close', 'closeOthers', 'closeAll', 'reopen', 'print', 'exportSession', 'importSession'],
   Edit: ['undo', 'redo', '—', 'cut', 'copy', 'paste', 'clipHistory', 'selectAll', 'selectNext', '—', 'column', 'duplicate', 'deleteLine', 'moveUp', 'moveDown', 'comment', 'blockComment', 'indent', 'outdent', 'overwrite', 'readOnly', '—', 'upper', 'lower', 'titleCase', 'invertCase', 'sort', 'sortDesc', 'sortNumeric', 'unique', 'removeEmpty', 'trim', 'trimLeading', 'join', 'reverse', 'tabsToSpaces', 'spacesToTabs', 'insertDate', 'characters'],
@@ -32,7 +34,7 @@ export function eventShortcut(event) {
 export const transforms = {
   upper: value => value.toUpperCase(), lower: value => value.toLowerCase(), titleCase: value => value.toLowerCase().replace(/(?:^|[^\p{L}\p{N}])\p{L}/gu, part => part.toUpperCase()),
   invertCase: value => value.replace(/\p{L}/gu, part => part === part.toUpperCase() ? part.toLowerCase() : part.toUpperCase()),
-  formatJson: value => JSON.stringify(JSON.parse(value), null, 2), compactJson: value => JSON.stringify(JSON.parse(value)),
+  formatJson: value => formatJsonText(value, 2), compactJson: value => formatJsonText(value, 0),
   urlEncode: encodeURIComponent, urlDecode: decodeURIComponent,
   base64Encode: value => btoa(Array.from(new TextEncoder().encode(value), byte => String.fromCharCode(byte)).join('')),
   base64Decode: value => new TextDecoder('utf-8', {fatal: true}).decode(Uint8Array.from(atob(value), char => char.charCodeAt(0))),

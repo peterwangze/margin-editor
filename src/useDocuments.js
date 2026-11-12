@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react'
 import {demoDocuments, documentFor, defaults, basename, dirname, browserSession} from './documents'
 import {withNewlines} from '../shared/text.mjs'
+import {focusEditor} from './editor'
 
 export function useDocuments(api, notify) {
   const [docs, setDocs] = useState(demoDocuments)
@@ -54,7 +55,7 @@ export function useDocuments(api, notify) {
       const line = view.state.doc.line(Math.min(Math.max(task.line, 1), view.state.doc.lines))
       view.dispatch({selection: {anchor: line.from + Math.max(0, Math.min(line.length, (task.column ?? 1) - 1))}, scrollIntoView: true})
     }
-    view.focus()
+    focusEditor(view)
     return true
   }
 
@@ -158,7 +159,7 @@ export function useDocuments(api, notify) {
     if (doc.dirty && !force && await confirm('Discard unsaved changes?', doc.name, ['Reload', 'Cancel']) !== 0) return
     const result = await api.open(doc.path, encoding)
     if (result.binary && !result.large) throw new Error('That encoding produced NUL bytes. Choose another encoding.')
-    amend(doc.id, {...result, large: result.large ?? null, savedText: result.text, savedFormat: [result.encoding, result.eol, result.mixed], dirty: false, external: null, readOnly: Boolean(result.lossy || result.large)})
+    amend(doc.id, item => ({...result, epoch: (item.epoch ?? 0) + 1, large: result.large ?? null, savedText: result.text, savedFormat: [result.encoding, result.eol, result.mixed], dirty: false, external: null, readOnly: Boolean(result.lossy || result.large)}))
     if (result.lossy && !result.large) notify('This encoding could not decode the file losslessly. Opened read-only.')
   }
 
