@@ -12,7 +12,7 @@ export function Dialog({label, children, close, className = ''}) {
     element.showModal()
     const input = element.querySelector('[data-focus]')
     input?.focus()
-    return () => { element.close(); if (previous?.isConnected) previous.focus() }
+    return () => { element.close(); if (previous?.isConnected && document.activeElement === document.body) previous.focus() }
   }, [])
   return <dialog className={`dialog ${className}`} ref={ref} aria-label={label} onCancel={event => { event.preventDefault(); close() }} onClick={event => { if (event.target === event.currentTarget) close() }}>
     <div className="dialog-inner"><div className="dialog-head"><h2>{label}</h2><IconButton icon={X} label="Close dialog" onClick={close} /></div>{children}</div>

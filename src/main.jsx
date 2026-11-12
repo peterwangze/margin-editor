@@ -140,7 +140,8 @@ function App() {
       if (!doc || doc.external?.fingerprint === external.fingerprint && doc.external?.error === external.error && doc.external) continue
       if (doc.fingerprint === external.fingerprint) { m.amend(doc.id, {mtime: external.mtime, size: external.size}); continue }
       if (doc.id === tail && !doc.dirty && !external.error) {
-        await m.reload(doc, doc.encoding, true)
+        if (doc.large) await m.readPage(doc, Number.MAX_SAFE_INTEGER)
+        else await m.reload(doc, doc.encoding, true)
         requestAnimationFrame(() => {
           const found = Object.values(m.views.current).find(item => item.id === doc.id)?.view
           if (found) goTo(found, found.state.doc.lines)
@@ -206,7 +207,8 @@ function App() {
     return <section className={`editor-pane ${active ? 'active-pane' : ''}`} aria-label={`${slot === 'main' ? 'Primary' : 'Secondary'} editor`}>
       <Tabs docs={m.docs} active={doc.id} focus={id => m.focus(id, slot)} close={id => safe(() => m.close([id]))} add={() => invoke('new')} reorder={m.reorder} context={(doc, x, y) => setContext({doc, x, y})} pane={slot} />
       {active && find.show && <FindBar query={find.query} change={find.change} replace={find.show === 'replace'} result={find.result} index={find.index} next={find.next} apply={find.apply} close={find.close} mark={() => invoke('markMatches')} options={() => invoke('searchOptions')} input={find.input} />}
-      {active && doc.external && <div className="conflict" role="alert"><AlertTriangle size={15} /><span>{doc.external.missing ? 'File moved or removed on disk.' : 'File changed on disk.'}</span>{!doc.external.error && <><button className="outline-button" onClick={() => safe(compareDisk)}>Compare</button><button className="outline-button" onClick={() => invoke('reload')}>Reload</button></>}<button className="outline-button" onClick={() => invoke('saveAs')}>Save As…</button></div>}
+      {active && doc.external && <div className="conflict" role="alert"><AlertTriangle size={15} /><span>{doc.external.missing ? 'File moved or removed on disk.' : 'File changed on disk.'}</span>{!doc.external.error && <>{!doc.large && <button className="outline-button" onClick={() => safe(compareDisk)}>Compare</button>}<button className="outline-button" onClick={() => invoke('reload')}>Reload</button></>}{!doc.large && <button className="outline-button" onClick={() => invoke('saveAs')}>Save As…</button>}</div>}
+      {doc.large && <div className="page-bar"><span>Read-only · {doc.large.offset.toLocaleString()}–{doc.large.end.toLocaleString()} / {doc.size.toLocaleString()} bytes</span><button className="outline-button" disabled={doc.large.index === 0} onClick={() => safe(() => m.readPage(doc, doc.large.index - 1))}>Previous page</button><button className="outline-button" onClick={() => setDialog({kind: 'fields', label: 'Go to file page', fields: [{name: 'page', label: `Page (1–${doc.large.pages})`, value: doc.large.index + 1, type: 'number', min: 1, max: doc.large.pages}], submit: ({page}) => m.readPage(doc, Number(page) - 1)})}>{doc.large.index + 1} / {doc.large.pages}</button><button className="outline-button" disabled={doc.large.index >= doc.large.pages - 1} onClick={() => safe(() => m.readPage(doc, doc.large.index + 1))}>Next page</button></div>}
       <div className="editor-body"><EditorSurface doc={doc} settings={m.settings} slot={slot} attach={m.attach} onEdit={onEdit} onCursor={onCursor} activate={m.setSlot} onScroll={onScroll} matches={active && find.show ? find.result.matches : noMatches} matchIndex={active ? find.index : -1} />
         {minimap && active && <DocumentMap text={doc.text} navigate={line => goTo(m.selectedView(), line)} />}</div>
     </section>

@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import {encode, decode} from '../desktop/codec.mjs'
-import {readDocument, saveDocument} from '../desktop/files.mjs'
+import {readDocument, saveDocument, readLargePage, EDIT_LIMIT, PAGE_SIZE} from '../desktop/files.mjs'
 import {searchWorkspace, applyWorkspace} from '../desktop/workspace.mjs'
 import {findMatches, replaceMatches, emptyQuery, newlines, withNewlines, updateMixed, encodings} from '../shared/text.mjs'
 
@@ -75,4 +75,23 @@ test('F03 workspace preview filters by depth and preflights selected files befor
   assert.deepEqual(await applyWorkspace(preview, query, [a]), {saved: [a]})
   assert.equal(await fs.readFile(a, 'utf8'), 'fixed 7\r\n')
   assert.equal(await fs.readFile(b, 'utf8'), 'third-party edit')
+})
+
+test('F04 large-file pages are bounded and do not split a UTF-8 code point', async t => {
+  const file = path.join(await fixture(t), 'large.log')
+  const handle = await fs.open(file, 'w')
+  try {
+    await handle.truncate(EDIT_LIMIT + PAGE_SIZE)
+    await handle.write(Buffer.from('start\n'), 0, 6, 0)
+    const sample = Buffer.from('🙂\nsecond')
+    await handle.write(sample, 0, sample.length, PAGE_SIZE - 2)
+  } finally { await handle.close() }
+  await assert.rejects(readDocument(file), /read limit/)
+  const one = await readLargePage(file, 'UTF-8')
+  const two = await readLargePage(file, 'UTF-8', 1)
+  assert.equal(one.large.end, PAGE_SIZE - 2)
+  assert.equal(two.large.offset, one.large.end)
+  assert.ok(two.text.startsWith('🙂\nsecond'))
+  assert.equal(two.readOnly, true)
+  assert.equal(two.lossy, false)
 })

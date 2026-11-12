@@ -5,7 +5,7 @@
 - **Notepad++** 的菜单、工具栏、标签和状态栏让常用功能可见。列编辑、扩展搜索模式、书签、编码、会话和宏是迁移用户常用工作流。保留这些入口和常用按键。 [官方手册](https://github.com/notepad-plus-plus/npp-usermanual/tree/1063c51df97e128f7860c6ea13d980eca89b4d10/content/docs) · [基线发行版](https://github.com/notepad-plus-plus/notepad-plus-plus/releases/tag/v8.9.9.1)
 - **平台和复杂窗口**。官方 FAQ 列出的本机支持是 Windows，窄窗口竖排标签有公开裁切报告。Margin 使用一致的跨平台工作台，标签条允许横向滚动，侧栏可折叠。 [平台 FAQ](https://github.com/notepad-plus-plus/notepad-plus-plus/wiki/FAQ#support-for-systems-other-than-the-ms-windows-family) · [标签裁切报告](https://github.com/notepad-plus-plus/notepad-plus-plus/issues/18594)
 - **跨文件替换**。原工具提供文件过滤和递归搜索；公开请求提出目录深度控制。Margin 的结果面板提供过滤、最大深度、可点击结果和替换预览，落盘前再次核对内容。 [搜索手册](https://github.com/notepad-plus-plus/npp-usermanual/blob/1063c51df97e128f7860c6ea13d980eca89b4d10/content/docs/searching.md) · [目录深度请求](https://github.com/notepad-plus-plus/notepad-plus-plus/issues/18544)
-- **大文件**。基线手册说明大文件选项可以全局关闭换行。Margin 按文档降低编辑开销，并限制目录搜索读取量。 [性能选项](https://github.com/notepad-plus-plus/npp-usermanual/blob/1063c51df97e128f7860c6ea13d980eca89b4d10/content/docs/preferences.md#performance)
+- **大文件**。基线手册说明大文件选项可以全局关闭换行。Margin 按文档降低编辑开销，并将超过 48 MiB 的文本切换到约 1 MiB 一页的只读浏览。 [性能选项](https://github.com/notepad-plus-plus/npp-usermanual/blob/1063c51df97e128f7860c6ea13d980eca89b4d10/content/docs/preferences.md#performance)
 - **VS Code** 将命令检索、分屏、符号导航、编辑器布局结合到工作台里。借用命令面板和双栏操作，使用传统菜单让低频能力也有固定入口。 [工作台](https://code.visualstudio.com/docs/editing/getting-started/userinterface) · [编辑基础](https://code.visualstudio.com/docs/editing/codebasics)
 - **Sublime Text** 把列选择建模成多光标，平台各有适用的按键。Margin 使用可直接输入的多个选择区，提供批量插入和数字序列。 [列选择](https://www.sublimetext.com/docs/column_selection.html)
 

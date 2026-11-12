@@ -39,9 +39,9 @@ test('S01/S02 visual grid, responsive chrome and keyboard focus', async ({page})
 test('I02/I03 actual input, regex, replace, undo and session reload', async ({page}) => {
   const failures = []
   page.on('pageerror', error => failures.push(error.message))
-  await page.keyboard.press(`${control}+n`)
+  await page.getByRole('button', {name: 'New document', exact: true}).click()
   await expect(page.getByRole('tab', {name: 'Untitled 1'})).toHaveAttribute('aria-selected', 'true')
-  await editor(page).click()
+  await expect(editor(page)).toBeFocused()
   await page.keyboard.insertText('error 17\nerror 22')
   await page.keyboard.press(`${control}+h`)
   await page.getByRole('textbox', {name: 'Find', exact: true}).fill('error (\\d+)')

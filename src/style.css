@@ -136,8 +136,7 @@ svg { flex: none; vertical-align: middle; stroke-width: 1.65; }
 .dirty-mark { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warning); flex: none; }
 .editor-surface { min-width: 0; min-height: 0; flex: 1; position: relative; background: var(--canvas); }
 .editor-surface .cm-editor { height: 100%; outline: none; font-family: var(--mono); font-size: var(--editor-size); line-height: 1.55; }
-.cm-editor .cm-content, .cm-editor .cm-gutter { min-height: 100%; padding: 8px 0 20px; }
-.cm-editor .cm-gutter { padding-bottom: 0; }
+.cm-editor .cm-content { min-height: 100%; padding: 8px 0 20px; }
 .cm-editor .cm-line { padding: 0 10px; }
 .cm-editor .cm-scroller { font: inherit; }
 .cm-editor .cm-gutters { background: var(--canvas); color: var(--quiet); border-right: 1px solid var(--line-muted); min-width: 50px; }
@@ -181,6 +180,8 @@ svg { flex: none; vertical-align: middle; stroke-width: 1.65; }
 .unsaved-text, .conflict { color: var(--warning); }
 .conflict { display: flex; gap: 8px; padding: 5px 10px; align-items: center; border-bottom: 1px solid var(--line); background: var(--chrome); }
 .conflict span { flex: 1; }
+.page-bar { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; padding: 5px 9px; border-bottom: 1px solid var(--line); background: var(--chrome); color: var(--muted); font-size: 12px; }
+.page-bar span { flex: 1; }
 .toast { position: absolute; bottom: 39px; right: 12px; z-index: 10; display: flex; align-items: center; gap: 12px; max-width: min(560px,90%); background: var(--chrome); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 4px 5px 4px 11px; border-radius: 5px; }
 .dialog { color: var(--text); background: var(--chrome); border: 1px solid var(--line); border-radius: 7px; width: min(470px, calc(100vw - 36px)); max-height: min(80vh, 640px); padding: 0; box-shadow: var(--shadow); }
 .dialog::backdrop { background: #12101983; }
@@ -231,6 +232,39 @@ svg { flex: none; vertical-align: middle; stroke-width: 1.65; }
 .context-menu { position: fixed; }
 .drop-overlay { display: grid; place-items: center; margin: 116px 10px 39px; border: 2px dashed var(--accent); pointer-events: none; background: color-mix(in srgb, var(--panel), transparent 16%); font-size: 19px; }
 #print-sheet { display: none; }
+@media (min-width: 1400px) and (min-height: 850px) {
+  .workbench { grid-template-rows: 36px 39px 56px minmax(0,1fr) 38px; font-size: 16px; }
+  .brand { font-size: 21px; }
+  .brand-mark { width: 25px; height: 25px; font-size: 18px; }
+  .menu-bar { padding-left: 8px; }
+  .menu-group > button { padding-inline: 12px; }
+  .toolbar { padding-inline: 14px; gap: 6px; }
+  .toolbar .icon-button, .palette-trigger { min-height: 37px; }
+  .toolbar svg, .palette-trigger svg { width: 20px; height: 20px; }
+  .activity { flex-basis: 66px; padding-top: 9px; gap: 9px; }
+  .activity .icon-button { width: 48px; height: 45px; }
+  .activity .icon-button svg { width: 25px; height: 25px; }
+  .activity [aria-pressed=true]::before { left: -9px; }
+  .sidebar { flex-basis: 269px; }
+  .workspace-search { flex-basis: 326px; }
+  .tabs, .panel-heading { height: 48px; }
+  .tab-name { padding-left: 18px; padding-right: 10px; }
+  .tab-close { margin-right: 9px; }
+  .sidebar summary { font-size: 13px; height: 33px; }
+  .side-row { min-height: 34px; padding-left: 19px; }
+  .findbar { padding: 10px 14px 10px 18px; gap: 8px; }
+  .find-row { gap: 9px; }
+  .find-row label { width: 66px; }
+  .find-row > input { height: 34px; }
+  .findbar .outline-button { min-height: 34px; padding-inline: 13px; }
+  .toggle-group button { min-width: 32px; height: 32px; }
+  .find-count { min-width: 76px; }
+  .editor-surface .cm-editor { font-size: calc(var(--editor-size) * 1.15); }
+  .cm-editor .cm-gutters { min-width: 70px; }
+  .cm-editor .cm-lineNumbers .cm-gutterElement { min-width: 42px; }
+  .status-bar { font-size: 14px; }
+  .status-controls button { padding-inline: 12px; }
+}
 @media (max-width: 900px) {
   .sidebar { flex-basis: 160px; }
   .workspace-search { flex-basis: min(265px, 43vw); }

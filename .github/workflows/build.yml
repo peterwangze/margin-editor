@@ -46,6 +46,7 @@ jobs:
         run: npm run package -- --${{ matrix.platform }} --${{ matrix.arch }}
       - name: Smoke test the built application
         if: matrix.smoke
+        timeout-minutes: 6
         run: |
           case '${{ matrix.platform }}' in
             win)
@@ -55,14 +56,34 @@ jobs:
             mac)
               export MARGIN_EXECUTABLE="$(find "$PWD/release" -path '*/Margin.app/Contents/MacOS/Margin' -type f | head -1)"
               test -x "$MARGIN_EXECUTABLE"
-              npm run test:desktop
+              node tests/packaged-smoke.mjs
               ;;
             linux)
-              export MARGIN_EXECUTABLE="$(find "$PWD/release" -path '*/linux*-unpacked/margin' -type f | head -1)"
+              deb=$(find "$PWD/release" -maxdepth 1 -name '*.deb' -type f)
+              dpkg-deb -x "$deb" "$RUNNER_TEMP/margin-deb"
+              export MARGIN_EXECUTABLE="$(find "$RUNNER_TEMP/margin-deb" -name margin -type f | head -1)"
               test -x "$MARGIN_EXECUTABLE"
               xvfb-run -a npm run test:desktop
               ;;
           esac
+      - name: Verify NSIS install and uninstall
+        if: matrix.platform == 'win' && matrix.arch == 'x64'
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $installer = (Get-ChildItem release -Filter '*-setup.exe').FullName
+          $target = Join-Path $env:RUNNER_TEMP 'margin-offline-install'
+          $install = Start-Process -FilePath $installer -ArgumentList '/S', "/D=$target" -WindowStyle Hidden -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "NSIS exit code $($install.ExitCode)" }
+          $env:MARGIN_EXECUTABLE = Join-Path $target 'Margin.exe'
+          try {
+            npm.cmd run test:desktop
+            if ($LASTEXITCODE -ne 0) { throw 'Installed application smoke tests failed' }
+          } finally {
+            $uninstaller = (Get-ChildItem -LiteralPath $target -Filter 'Uninstall*.exe').FullName
+            if ($uninstaller) { Start-Process -FilePath $uninstaller -ArgumentList '/S' -WindowStyle Hidden -Wait }
+          }
+          if (Test-Path -LiteralPath $env:MARGIN_EXECUTABLE) { throw 'Uninstall left Margin.exe behind' }
       - uses: actions/upload-artifact@v4
         with:
           name: Margin-${{ matrix.platform }}-${{ matrix.arch }}

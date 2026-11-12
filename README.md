@@ -12,7 +12,7 @@ Open a log, change a config, or clean up a whole folder of files. Margin puts th
 
 ## From a quick edit to a folder-wide change
 
-- **Start where you left off.** Open local files or folders, drop them into the window, or use the command line. Unsaved documents return with your session. Switch between Ink and Paper, split the editor, or clone one document into two views.
+- **Start where you left off.** Open local files or folders, drop them into the window, or use the command line. Unsaved documents return with your session. Split the editor, clone a document into two views, or page through a large log in read-only mode.
 - **Review replacements before writing.** Find literal text, extended escapes, or regex captures. Filter folder searches by glob and depth, review before-and-after results, and choose which files to update. Margin checks that files still match the preview before applying it.
 - **Keep control of your files.** Reopen with a different encoding, convert on save, or pick an EOL format from the status bar. When a file changes on disk, compare the two versions and choose how to proceed. Optional backup copies preserve the previous bytes.
 - **Turn repetitive edits into commands.** Use rectangular selections, multiple cursors, bookmarks, line transformations, and replayable edit macros. Open the command palette to find JSON formatting, Markdown preview, encoding utilities, and local tools.

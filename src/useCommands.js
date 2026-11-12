@@ -243,6 +243,7 @@ export function useCommands(ctx) {
     setOutput({title: id.toUpperCase(), text: value})
   }
   const requiresPath = new Set(['reload', 'reveal', 'rename', 'trash', 'reinterpret', 'tail'])
+  const requiresEditableSize = new Set(['save', 'saveAs', 'saveCopy', 'rename', 'readOnly', 'convert', 'lf', 'crlf', 'cr', 'diff'])
   const groups = Object.fromEntries(Object.entries(menus).flatMap(([group, ids]) => ids.map(id => [id, group])))
-  return Object.fromEntries(Object.entries(definitions).map(([id, [label, key]]) => [id, {id, group: groups[id], label: id === 'macroRecord' && recording ? 'Stop macro recording' : label, key: m.settings.shortcuts[id] ?? key, action: actions[id], disabled: requiresPath.has(id) && !doc.path}]))
+  return Object.fromEntries(Object.entries(definitions).map(([id, [label, key]]) => [id, {id, group: groups[id], label: id === 'macroRecord' && recording ? 'Stop macro recording' : label, key: m.settings.shortcuts[id] ?? key, action: actions[id], disabled: (requiresPath.has(id) && !doc.path) || (Boolean(doc.large) && requiresEditableSize.has(id))}]))
 }

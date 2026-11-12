@@ -11,9 +11,14 @@ const executablePath = process.env.MARGIN_EXECUTABLE || undefined
 
 async function launch(profile, files = []) {
   const app = await electron.launch({executablePath, args: [...(executablePath ? [] : ['.']), ...files], env: {...process.env, MARGIN_PROFILE: profile}, timeout: 25000})
-  const page = await app.firstWindow()
-  await expect(page.getByRole('textbox', {name: 'Document editor'})).toBeVisible({timeout: 12000})
-  return {app, page}
+  try {
+    const page = await app.firstWindow({timeout: 15000})
+    await expect(page.getByRole('textbox', {name: 'Document editor'})).toBeVisible({timeout: 12000})
+    return {app, page}
+  } catch (error) {
+    app.process().kill()
+    throw error
+  }
 }
 
 test('I01/I05/I07 open from CLI, edit, write encoded bytes, block external overwrite and recover after close', {timeout: 75000}, async t => {

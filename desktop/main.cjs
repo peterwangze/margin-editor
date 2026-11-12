@@ -6,7 +6,8 @@ const {Worker} = require('node:worker_threads')
 const {spawn} = require('node:child_process')
 const {createHash, randomUUID} = require('node:crypto')
 
-if (process.env.MARGIN_PROFILE) app.setPath('userData', path.resolve(process.env.MARGIN_PROFILE))
+const profile = process.env.MARGIN_PROFILE || (process.env.PORTABLE_EXECUTABLE_DIR && path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'Margin Data'))
+if (profile) app.setPath('userData', path.resolve(profile))
 const dist = path.join(__dirname, '../dist')
 const page = 'margin://local/index.html'
 protocol.registerSchemesAsPrivileged([{scheme: 'margin', privileges: {standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, codeCache: true}}])
@@ -108,8 +109,10 @@ const actions = {
   async open(file, encoding) {
     const stat = await fs.stat(file)
     if (stat.isDirectory()) return {directory: await fs.realpath(file)}
-    return (await files).readDocument(file, encoding)
+    const f = await files
+    return stat.size > f.EDIT_LIMIT ? f.readLargePage(file, encoding) : f.readDocument(file, encoding)
   },
+  async largePage(file, encoding, index) { return (await files).readLargePage(file, encoding, index) },
   async saveDialog(defaultPath) { return (await dialog.showSaveDialog(window, {defaultPath, title: 'Save document'})).filePath ?? null },
   async save(filename, document, expected, backup) {
     const f = await files
@@ -135,7 +138,8 @@ const actions = {
       try {
         const stat = await fs.stat(file)
         if (stat.mtimeMs === mtime && stat.size === size) return null
-        return {path: file, mtime: stat.mtimeMs, size: stat.size, fingerprint: f.fingerprint((await f.readBytes(file)).bytes)}
+        const fingerprint = stat.size > f.EDIT_LIMIT ? f.largeFingerprint(stat) : f.fingerprint((await f.readBytes(file)).bytes)
+        return {path: file, mtime: stat.mtimeMs, size: stat.size, fingerprint}
       } catch (error) { return {path: file, missing: error.code === 'ENOENT', error: error.message} }
     }))
     return states.filter(Boolean)

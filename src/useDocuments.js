@@ -36,23 +36,24 @@ export function useDocuments(api, notify) {
   const selectedView = () => views.current[slot]?.view ?? views.current.main?.view
   function focus(id, target = slot, location) {
     if (target === 'secondary' && !split) target = 'main'
-    if (location) waiting.current = {id, ...location}
+    waiting.current = {id, target, ...location}
     if (target === 'main') setMain(id)
     else setSecondary(id)
     setSlot(target)
     if (views.current[target]?.id === id) {
       const view = views.current[target].view
-      if (location) jumpWaiting(view, id)
-      else view.focus()
+      jumpWaiting(view, id, target)
     }
   }
 
-  function jumpWaiting(view, id) {
+  function jumpWaiting(view, id, target) {
     const task = waiting.current
-    if (task?.id !== id) return false
+    if (task?.id !== id || task.target !== target) return false
     waiting.current = null
-    const line = view.state.doc.line(Math.min(Math.max(task.line, 1), view.state.doc.lines))
-    view.dispatch({selection: {anchor: line.from + Math.max(0, Math.min(line.length, (task.column ?? 1) - 1))}, scrollIntoView: true})
+    if (task.line) {
+      const line = view.state.doc.line(Math.min(Math.max(task.line, 1), view.state.doc.lines))
+      view.dispatch({selection: {anchor: line.from + Math.max(0, Math.min(line.length, (task.column ?? 1) - 1))}, scrollIntoView: true})
+    }
     view.focus()
     return true
   }
@@ -60,7 +61,7 @@ export function useDocuments(api, notify) {
   const attach = (key, view, id) => {
     if (!view) { delete views.current[key]; return }
     views.current[key] = {view, id}
-    if (!jumpWaiting(view, id) && key === slot && (!document.activeElement || document.activeElement === document.body)) view.focus()
+    if (!jumpWaiting(view, id, key) && key === slot && (!document.activeElement || document.activeElement === document.body)) view.focus()
   }
 
   function add(doc, location) {
@@ -91,12 +92,12 @@ export function useDocuments(api, notify) {
     if (!api) return
     const result = await api.open(path)
     if (result.directory) { await setFolder(result.directory); return }
-    if (result.binary) throw new Error(`${result.name} contains NUL bytes and appears to be binary.`)
+    if (result.binary && !result.large) throw new Error(`${result.name} contains NUL bytes and appears to be binary.`)
     const existing = docsRef.current.find(doc => doc.path === result.path)
     const location = line ? {line, column} : undefined
     if (existing) focus(existing.id, slot, location)
-    else add(documentFor(result.name, result.text, {...result, readOnly: result.lossy}), location)
-    if (result.lossy) notify('Opened read-only. Reopen with another encoding to edit the original bytes.')
+    else add(documentFor(result.name, result.text, {...result, readOnly: Boolean(result.lossy || result.large)}), location)
+    if (result.lossy && !result.large) notify('Opened read-only. Reopen with another encoding to edit the original bytes.')
     remember(result.path)
   }
 
@@ -120,6 +121,7 @@ export function useDocuments(api, notify) {
   async function save(id = active, kind = 'normal') {
     const doc = docsRef.current.find(item => item.id === id)
     if (!doc || saving.current.has(id)) return false
+    if (doc.large) throw new Error('Large-file pages are read-only.')
     saving.current.add(id)
     try {
       if (!api) {
@@ -155,9 +157,22 @@ export function useDocuments(api, notify) {
     if (!doc?.path) return
     if (doc.dirty && !force && await confirm('Discard unsaved changes?', doc.name, ['Reload', 'Cancel']) !== 0) return
     const result = await api.open(doc.path, encoding)
-    if (result.binary) throw new Error('That encoding produced NUL bytes. Choose another encoding.')
-    amend(doc.id, {...result, savedText: result.text, savedFormat: [result.encoding, result.eol, result.mixed], dirty: false, external: null, readOnly: result.lossy})
-    if (result.lossy) notify('This encoding could not decode the file losslessly. Opened read-only.')
+    if (result.binary && !result.large) throw new Error('That encoding produced NUL bytes. Choose another encoding.')
+    amend(doc.id, {...result, large: result.large ?? null, savedText: result.text, savedFormat: [result.encoding, result.eol, result.mixed], dirty: false, external: null, readOnly: Boolean(result.lossy || result.large)})
+    if (result.lossy && !result.large) notify('This encoding could not decode the file losslessly. Opened read-only.')
+  }
+
+  async function readPage(doc, index) {
+    if (!doc?.large) return
+    const result = await api.largePage(doc.path, doc.encoding, index)
+    amend(doc.id, {...result, savedText: result.text, bookmarks: [], external: null})
+    cursors.current.delete(doc.id)
+    requestAnimationFrame(() => {
+      for (const {view, id} of Object.values(views.current)) if (id === doc.id) {
+        view.dispatch({selection: {anchor: 0}, scrollIntoView: true})
+        view.scrollDOM.scrollTop = 0
+      }
+    })
   }
 
   async function close(ids) {
@@ -266,5 +281,5 @@ export function useDocuments(api, notify) {
     return () => clearTimeout(timer)
   }, [ready, docs, main, secondary, split, workspace, settings, recent, macros])
 
-  return {docs, docsRef, main, secondary, slot, setSlot, split, workspace, entries, recent, settings, setSettings, macros, setMacros, doc, current, commit, amend, attach, views, cursors, selectedView, focus, add, create, open, openBrowser, openPath, openPaths, setFolder, pickFolder, save, reload, confirm, close, reopen, reorder, changeSplit, fileInput, snapshot, applySession}
+  return {docs, docsRef, main, secondary, slot, setSlot, split, workspace, entries, recent, settings, setSettings, macros, setMacros, doc, current, commit, amend, attach, views, cursors, selectedView, focus, add, create, open, openBrowser, openPath, openPaths, setFolder, pickFolder, save, reload, readPage, confirm, close, reopen, reorder, changeSplit, fileInput, snapshot, applySession}
 }
