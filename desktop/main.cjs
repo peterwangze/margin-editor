@@ -128,7 +128,11 @@ const actions = {
     if (process.platform !== 'win32' && /^[A-Z]:/i.test(source)) return null
     return path.resolve(path.dirname(session), source.replaceAll('\\', '/'))
   },
-  async saveDialog(defaultPath) { return (await dialog.showSaveDialog(window, {defaultPath, title: 'Save document'})).filePath ?? null },
+  async saveDialog(defaultPath) {
+    const {filePath} = await dialog.showSaveDialog(window, {defaultPath, title: 'Save document'})
+    if (!filePath) return null
+    return await (await files).existing(filePath) ?? filePath
+  },
   async save(filename, document, expected, backup) {
     const f = await files
     if (document.large) return f.saveLargePage(filename, document, expected, {backup})

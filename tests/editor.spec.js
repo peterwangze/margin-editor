@@ -14,6 +14,38 @@ async function command(page, name) {
 
 test.beforeEach(async ({page}) => { await page.goto('/'); await expect(editor(page)).toBeVisible() })
 
+test('inspect pasted text, preview an opt-in cleanup, apply and undo in one step', async ({page}) => {
+  const original = 'copy\u00a0text\u200b  \nkeep 👩‍💻'
+  await page.keyboard.insertText(original)
+  await page.keyboard.press(`${control}+a`)
+  await page.getByRole('button', {name: 'Inspect & clean text', exact: true}).click()
+  const dialog = page.getByRole('dialog', {name: 'Inspect & clean text'})
+  await expect(dialog.getByRole('combobox', {name: 'Inspect'})).toHaveValue('selection')
+  await expect(dialog.getByText('U+00A0', {exact: true})).toBeVisible()
+  await expect(dialog.getByText('U+200D', {exact: true})).toBeVisible()
+  const apply = dialog.getByRole('button', {name: 'Apply cleanup'})
+  await expect(apply).toBeDisabled()
+  await dialog.getByRole('checkbox', {name: 'Trim trailing spaces and tabs'}).check()
+  await dialog.getByRole('checkbox', {name: 'Replace no-break spaces with spaces'}).check()
+  await dialog.getByRole('checkbox', {name: 'Remove zero-width spaces (U+200B)'}).check()
+  await expect(dialog.getByRole('status')).toHaveText('1 changed line')
+  await expect(dialog.getByText('copy[U+00A0]text[U+200B]··', {exact: true})).toBeVisible()
+  await expect(dialog.getByText('copy·text', {exact: true})).toBeVisible()
+  if (process.env.MARGIN_SCREENSHOTS) await page.screenshot({path: 'docs/screenshots/inspect.png', animations: 'disabled'})
+  await page.setViewportSize({width: 650, height: 540})
+  expect(await dialog.evaluate(element => element.scrollWidth - element.clientWidth)).toBe(0)
+  await apply.click()
+  await expect(lines(page).first()).toHaveText('copy text')
+  await expect(lines(page).last()).toHaveText('keep 👩‍💻')
+  await expect(editor(page)).toBeFocused()
+  await page.keyboard.press(`${control}+z`)
+  await page.getByRole('button', {name: 'Inspect & clean text', exact: true}).click()
+  await expect(dialog.getByText('U+200B', {exact: true})).toBeVisible()
+  await expect(dialog.getByText('U+00A0', {exact: true})).toBeVisible()
+  await dialog.getByRole('checkbox', {name: 'Trim trailing spaces and tabs'}).check()
+  await expect(dialog.getByText('copy[U+00A0]text[U+200B]··', {exact: true})).toBeVisible()
+})
+
 test('S01/S02 visual grid, responsive chrome and keyboard focus', async ({page}) => {
   await expect(page.getByRole('navigation', {name: 'Application menus'})).toBeVisible()
   await expect(page.getByRole('tab', {name: 'Untitled 1'})).toHaveAttribute('aria-selected', 'true')

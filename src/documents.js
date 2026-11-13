@@ -27,7 +27,7 @@ const samples = {
   ]
 }
 `,
-  'welcome.md': `# Welcome to Margin\n\nA workbench for local text and code.\n\n- Open a file or a folder from the toolbar.\n- Use **Find** to search the current document.\n- Use **Find in Files** to preview changes across a folder.\n- Open the **Command Palette** to find any command.\n\nThis sample is editable. Save a copy to keep your changes.\n`,
+  'welcome.md': `# Welcome to Margin\n\nA place to work with notes, lists, and logs, entirely offline.\n\n- Open a text file from the toolbar or drop it onto the editor.\n- Click the length in the status bar to count words and inspect hidden characters.\n- Use **Find in Files** to preview changes across a folder.\n\nThis sample is editable. Save a copy to keep your changes.\n`,
   'notes.txt': 'Release notes\n\n- Verify offline installers\n- Review search results\n- Save workspace notes\n',
 }
 

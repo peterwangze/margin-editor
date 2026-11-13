@@ -15,7 +15,7 @@ export function withNewlines({text, eol, mixed}) {
   return text.replace(/\n/g, () => mixed?.[index++] ?? EOLS[eol] ?? '\n')
 }
 
-export const encodings = ['UTF-8', 'UTF-8 BOM', 'UTF-16 LE', 'UTF-16 BE', 'UTF-16 LE (no BOM)', 'UTF-16 BE (no BOM)', 'UTF-32 LE', 'UTF-32 BE', 'Windows-1252', 'Windows-1250', 'Windows-1251', 'Windows-1253', 'Windows-1254', 'Windows-1255', 'Windows-1256', 'Windows-1257', 'Windows-1258', 'GB18030', 'GBK', 'Big5', 'Shift_JIS', 'EUC-JP', 'EUC-KR', 'KOI8-R', 'KOI8-U', 'ISO-8859-1', 'ISO-8859-2', 'ISO-8859-5', 'ISO-8859-7', 'ISO-8859-9', 'ISO-8859-15', 'IBM437', 'IBM850', 'IBM866', 'Macintosh']
+export const encodings = ['UTF-8', 'UTF-8 BOM', 'UTF-16 LE', 'UTF-16 BE', 'UTF-16 LE (no BOM)', 'UTF-16 BE (no BOM)', 'UTF-32 LE', 'UTF-32 BE', 'UTF-32 LE (no BOM)', 'UTF-32 BE (no BOM)', 'Windows-1252', 'Windows-1250', 'Windows-1251', 'Windows-1253', 'Windows-1254', 'Windows-1255', 'Windows-1256', 'Windows-1257', 'Windows-1258', 'GB18030', 'GBK', 'Big5', 'Shift_JIS', 'EUC-JP', 'EUC-KR', 'KOI8-R', 'KOI8-U', 'ISO-8859-1', 'ISO-8859-2', 'ISO-8859-5', 'ISO-8859-7', 'ISO-8859-9', 'ISO-8859-15', 'IBM437', 'IBM850', 'IBM866', 'Macintosh']
 
 export const emptyQuery = {needle: '', replacement: '', mode: 'literal', caseSensitive: false, whole: false, dotAll: false, wrap: true, inSelection: false}
 

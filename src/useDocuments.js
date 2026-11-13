@@ -4,6 +4,9 @@ import {withNewlines} from '../shared/text.mjs'
 import {focusEditor} from './editor'
 import {fromScintillaPositions, notepadEncoding} from './notepad-session'
 
+const sameContent = (before, after) => before.path === after.path && before.text === after.text &&
+  before.encoding === after.encoding && before.eol === after.eol && before.mixed === after.mixed
+
 export function useDocuments(api, notify) {
   const [docs, setDocs] = useState(() => [documentFor('Untitled 1')])
   const docsRef = useRef(docs)
@@ -25,6 +28,8 @@ export function useDocuments(api, notify) {
   const waiting = useRef(null)
   const openRequests = useRef(null)
   const snapshot = useRef(null)
+  const beforeClose = useRef(null)
+  const closingTabs = useRef(false)
   const lastPersistError = useRef('')
 
   const active = (slot === 'secondary' && split ? secondary : main)
@@ -140,6 +145,7 @@ export function useDocuments(api, notify) {
       if (!file || kind !== 'normal') {
         file = await api.saveDialog(doc.path ?? doc.name)
         if (!file) return false
+        if (kind === 'copy' && file === doc.path) throw new Error('Choose a different file for the copy.')
         if (docsRef.current.some(item => item.id !== id && item.path === file)) throw new Error('That file is already open in another tab.')
         expected = file === doc.path ? doc.fingerprint : 'confirmed-dialog'
       } else if (doc.lossy) throw new Error('Reopen with the correct encoding before saving this file.')
@@ -152,7 +158,9 @@ export function useDocuments(api, notify) {
       else if (kind !== 'copy') amend(id, item => ({...info, dirty: item.text !== doc.text || item.encoding !== doc.encoding || item.eol !== doc.eol || item.mixed !== doc.mixed,
         savedText: doc.text, savedFormat: [doc.encoding, doc.eol, doc.mixed], external: null, sample: false}))
       remember(info.path)
-      if (workspace && dirname(info.path) === workspace) setEntries(await api.entries(workspace))
+      if (workspace && dirname(info.path) === workspace) {
+        try { setEntries(await api.entries(workspace)) } catch {}
+      }
       notify(`Saved ${info.name}`)
       return true
     } catch (error) { if (doc.large) amend(id, {readOnly: doc.readOnly}); throw error }
@@ -161,10 +169,11 @@ export function useDocuments(api, notify) {
 
   async function reload(doc, encoding, force = false) {
     if (!doc?.path) return
+    if (saving.current.has(doc.id)) { notify('Wait for the current save before reloading.'); return }
     if (doc.dirty && !force && await confirm('Discard unsaved changes?', doc.name, ['Reload', 'Cancel']) !== 0) return
     const result = await api.open(doc.path, encoding)
     const latest = docsRef.current.find(item => item.id === doc.id)
-    if (!latest || latest.path !== doc.path || latest.text !== doc.text || latest.dirty !== doc.dirty) {
+    if (!latest || !sameContent(doc, latest) || latest.dirty !== doc.dirty || saving.current.has(doc.id)) {
       notify('The document changed during reload. Your edits are still open.')
       return
     }
@@ -188,26 +197,38 @@ export function useDocuments(api, notify) {
   }
 
   async function close(ids) {
-    for (const id of ids) {
-      if (saving.current.has(id)) return
-      const doc = docsRef.current.find(item => item.id === id)
-      if (!doc) continue
-      if (doc.dirty) {
-        const options = api ? ['Save', 'Discard', 'Cancel'] : ['Discard', 'Cancel']
-        const choice = await confirm(`Save changes to ${doc.name}?`, 'Unsaved changes will be removed from this session if you discard them.', options)
-        if (choice === options.length - 1) return
-        if (api && choice === 0 && !await save(id)) return
+    if (closingTabs.current) return
+    closingTabs.current = true
+    try {
+      for (const id of ids) {
+        if (saving.current.has(id)) { notify('Wait for the current save before closing.'); return }
+        const doc = docsRef.current.find(item => item.id === id)
+        if (!doc) continue
+        if (doc.dirty) {
+          const options = api ? ['Save', 'Discard', 'Cancel'] : ['Discard', 'Cancel']
+          const choice = await confirm(`Save changes to ${doc.name}?`, 'Unsaved changes will be removed from this session if you discard them.', options)
+          if (choice === options.length - 1) return
+          const shouldSave = api && choice === 0
+          if (shouldSave && !await save(id)) return
+          const latest = docsRef.current.find(item => item.id === id)
+          if (!latest) continue
+          if (saving.current.has(id) || latest.dirty && (shouldSave || !sameContent(doc, latest))) {
+            notify('The document changed while closing. Your edits are still open.')
+            return
+          }
+        }
+        const before = docsRef.current
+        const index = before.findIndex(item => item.id === id)
+        const next = before.filter(item => item.id !== id)
+        if (!next.length) next.push(documentFor('Untitled 1', '', {encoding: settings.newEncoding, eol: settings.newEol}))
+        const fallback = next[Math.min(index, next.length - 1)].id
+        const saved = before[index]
+        closed.current = [{...saved, dirty: false}, ...closed.current].slice(0, 20)
+        commit(() => next)
+        setMain(value => value === id ? fallback : value)
+        setSecondary(value => value === id ? fallback : value)
       }
-      const before = docsRef.current
-      const index = before.findIndex(item => item.id === id)
-      const next = before.filter(item => item.id !== id)
-      if (!next.length) next.push(documentFor('Untitled 1', '', {encoding: settings.newEncoding, eol: settings.newEol}))
-      const fallback = next[Math.min(index, next.length - 1)].id
-      closed.current = [{...doc, dirty: false}, ...closed.current].slice(0, 20)
-      commit(() => next)
-      setMain(value => value === id ? fallback : value)
-      setSecondary(value => value === id ? fallback : value)
-    }
+    } finally { closingTabs.current = false }
   }
 
   function reopen() {
@@ -319,6 +340,36 @@ export function useDocuments(api, notify) {
     if (api) return api.storeSession(value)
     localStorage.setItem('margin.session.v1', JSON.stringify(value))
   }
+  beforeClose.current = async () => {
+    if (saving.current.size || closingTabs.current) {
+      notify('Finish saving or closing documents before quitting.')
+      return false
+    }
+    if (!snapshot.current().settings.recover) {
+      const dirty = docsRef.current.filter(doc => doc.dirty)
+      if (dirty.length) {
+        const choice = await confirm('Quit with unsaved documents?', 'Session recovery is off. Save your changes before quitting or discard them.', ['Save All', 'Discard Changes', 'Cancel'])
+        if (choice === 2) return false
+        if (choice === 0) {
+          for (const doc of dirty) if (!await save(doc.id)) return false
+          if (docsRef.current.some(doc => doc.dirty)) {
+            notify('Some documents changed while saving. Your edits are still open.')
+            return false
+          }
+        } else if (docsRef.current.some(doc => doc.dirty && !dirty.some(item => item.id === doc.id && sameContent(item, doc)))) {
+          notify('Documents changed while quitting. Your edits are still open.')
+          return false
+        }
+      }
+    }
+    const documents = docsRef.current
+    await persist()
+    if (saving.current.size || docsRef.current.some(doc => doc.dirty && !documents.some(item => item.id === doc.id && sameContent(item, doc)))) {
+      notify('Documents changed while quitting. Your edits are still open.')
+      return false
+    }
+    return true
+  }
   openRequests.current = openPaths
   useEffect(() => {
     let live = true
@@ -337,9 +388,7 @@ export function useDocuments(api, notify) {
     start().catch(error => notify(error.message))
     const close = api?.onBeforeClose(async () => {
       try {
-        if (!snapshot.current().settings.recover && docsRef.current.some(doc => doc.dirty) && await confirm('Quit with unsaved documents?', 'Session recovery is off. Save your files before closing if you want to keep them.', ['Quit', 'Cancel']) !== 0) return api.closeReply(false)
-        await persist()
-        await api.closeReply(true)
+        await api.closeReply(await beforeClose.current())
       } catch (error) { notify(error.message); await api.closeReply(false) }
     })
     const unload = () => { if (!api) { try { persist() } catch {} } }

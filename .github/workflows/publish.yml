@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       build_run:
-        description: Successful desktop build run for this commit
+        description: Successful desktop acceptance run for this commit
         type: string
         required: true
 
@@ -30,34 +30,84 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
-          gh run view "$BUILD_RUN" --json conclusion,headSha,workflowName | jq -e --arg sha "$GITHUB_SHA" '.conclusion == "success" and .headSha == $sha and .workflowName == "Desktop validation and offline packages"'
+          gh run view "$BUILD_RUN" --json conclusion,headSha,workflowName,jobs | jq -e --arg sha "$GITHUB_SHA" '
+            .conclusion == "success" and .headSha == $sha and .workflowName == "Desktop validation and offline packages" and
+            ([.jobs[] | select(.conclusion == "success") | .name] | sort) ==
+            ["linux arm64","linux x64","mac arm64","mac x64","win arm64","win x64"]
+          '
           gh run download "$BUILD_RUN" --pattern 'Margin-*' --dir verified
-      - name: Verify manifest and publish prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD_RUN: ${{ inputs.build_run }}
+          gh run download "$BUILD_RUN" --pattern 'acceptance-*' --dir evidence
+      - name: Verify acceptance evidence and package manifest
+        id: manifest
         run: |
           set -euo pipefail
           version=$(node -p 'require("./package.json").version')
-          for platform in win mac linux; do
-            for arch in x64 arm64; do
-              [[ $(find "verified/Margin-$platform-$arch" -maxdepth 1 -type f | wc -l) == 2 ]]
-            done
-          done
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
           mkdir packages
-          find verified -type f -exec cp -n '{}' packages/ \;
+          verify_evidence() {
+            local platform=$1 arch=$2 form=$3 node_platform=$4
+            local dir="evidence/acceptance-$platform-$arch"
+            test -s "$dir/package-checks.txt"
+            for screenshot in editor replace inspect; do test -s "$dir/$form-$screenshot.png"; done
+            jq -e --arg platform "$node_platform" --arg arch "$arch" --arg form "$form" '
+              .platform == $platform and .arch == $arch and .packageForm == $form and
+              (.passed | index("desktop layout") != null and index("inspect and clean") != null and index("disk byte verification") != null)
+            ' "$dir/$form.json"
+          }
+          for arch in x64 arm64; do
+            deb_arch=$arch
+            appimage_arch=$arch
+            if [[ "$arch" == x64 ]]; then
+              deb_arch=amd64
+              appimage_arch=x86_64
+            fi
+            cp -- "verified/Margin-win-$arch/Margin-$version-win-$arch-setup.exe" packages/
+            cp -- "verified/Margin-win-$arch/Margin-$version-win-$arch-portable.exe" packages/
+            cp -- "verified/Margin-mac-$arch/Margin-$version-mac-$arch.dmg" packages/
+            cp -- "verified/Margin-mac-$arch/Margin-$version-mac-$arch.zip" packages/
+            cp -- "verified/Margin-linux-$arch/Margin-$version-linux-$appimage_arch.AppImage" packages/
+            cp -- "verified/Margin-linux-$arch/Margin-$version-linux-$deb_arch.deb" packages/
+            verify_evidence win "$arch" setup win32
+            verify_evidence win "$arch" portable win32
+            verify_evidence mac "$arch" dmg darwin
+            verify_evidence mac "$arch" zip darwin
+            verify_evidence linux "$arch" appimage linux
+            verify_evidence linux "$arch" deb linux
+          done
+          (cd evidence && zip -rq ../packages/ACCEPTANCE.zip acceptance-*)
           cd packages
-          [[ $(find . -maxdepth 1 -type f | wc -l) == 12 ]]
           sha256sum -- * > SHA256SUMS.txt
           sha256sum --check SHA256SUMS.txt
-          cd ..
+      - name: Publish verified stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ inputs.build_run }}
+          VERSION: ${{ steps.manifest.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          remote_tag=$(git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" | tail -n 1 | cut -f 1)
+          [[ -z "$remote_tag" || "$remote_tag" == "$GITHUB_SHA" ]]
           cp docs/release-notes.md release-notes.txt
           printf '\n[Platform build and acceptance logs](https://github.com/%s/actions/runs/%s)\n' "$GITHUB_REPOSITORY" "$BUILD_RUN" >> release-notes.txt
-          if gh release view "v$version" --json isDraft --jq .isDraft > draft.txt 2>/dev/null; then
-            [[ $(cat draft.txt) == true ]]
+          if gh release view "$tag" --json isDraft,targetCommitish > draft.json 2>/dev/null; then
+            jq -e --arg sha "$GITHUB_SHA" '.isDraft and .targetCommitish == $sha' draft.json
+            gh release edit "$tag" --notes-file release-notes.txt --prerelease=false
           else
-            gh release create "v$version" --target "$GITHUB_SHA" --title "Margin $version" --draft --prerelease --notes-file release-notes.txt
+            gh release create "$tag" --target "$GITHUB_SHA" --title "Margin $VERSION" --draft --notes-file release-notes.txt
           fi
-          gh release upload "v$version" packages/* --clobber
-          [[ $(gh release view "v$version" --json assets --jq '.assets | length') == 13 ]]
-          gh release edit "v$version" --draft=false
+          gh release view "$tag" --json assets --jq '.assets[].name' > current-assets.txt
+          missing=()
+          for asset in packages/*; do
+            name=${asset##*/}
+            if ! grep -Fxq -- "$name" current-assets.txt; then missing+=("$asset"); fi
+          done
+          if ((${#missing[@]})); then gh release upload "$tag" "${missing[@]}"; fi
+          gh release view "$tag" --json assets --jq '.assets[] | [.name, .state, .digest] | @tsv' > uploaded.txt
+          while read -r digest name; do
+            printf '%s\tuploaded\tsha256:%s\n' "$name" "$digest"
+          done < <(cd packages && sha256sum -- *) | sort > expected.txt
+          sort uploaded.txt > uploaded-sorted.txt
+          diff -u expected.txt uploaded-sorted.txt
+          gh release edit "$tag" --draft=false --prerelease=false --latest

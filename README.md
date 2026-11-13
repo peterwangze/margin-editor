@@ -2,59 +2,56 @@
 
 # Margin
 
-**A desktop editor for the text work you do every day.**
+**Plain text for notes, lists, logs, and everything you paste in between.**
 
-Open a log, change a config, or clean up a whole folder of files. Margin puts the familiar menu bar and tabs up front, and keeps encoding, line endings, and unsaved changes visible while you work. Use it offline on Windows, macOS, or Linux.
+Open Margin and start typing. The menu, toolbar, and document tabs keep common actions close, while the status bar shows the current encoding and line endings. When a quick edit turns into a batch change, review the result before writing anything to disk. Your files stay local on Windows, macOS, and Linux.
 
-[All releases](https://github.com/peterwangze/margin-editor/releases) · [Design and architecture](docs/architecture.md) · [Release acceptance checklist](docs/acceptance.md)
+[Download from GitHub Releases](https://github.com/peterwangze/margin-editor/releases) · [Product research](docs/research.md) · [Release acceptance checklist](docs/acceptance.md)
 
-## Download Margin 0.9.1
+![Margin in its Paper theme. A plain-text note fills the window below the document tabs, with encoding and line endings visible in the status bar.](docs/screenshots/workbench.png)
 
-Choose the offline package for your operating system and processor. This version is a public prerelease.
+## Edit and check your text
 
-| Platform | Intel / AMD 64-bit | ARM64 |
-| --- | --- | --- |
-| Windows | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-x64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-x64-portable.exe) | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-arm64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-arm64-portable.exe) |
-| macOS | [DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-x64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-x64.zip) | [Apple Silicon DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-arm64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-arm64.zip) |
-| Linux | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-x86_64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-amd64.deb) | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-arm64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-arm64.deb) |
+- **Write a note or tidy a list.** Start in a blank document, drag in files, or split the view to read two places at once. Sort lines, remove duplicates, and use rectangular selections or multiple cursors for repeated edits.
+- **Inspect text copied from elsewhere.** Open **Edit → Inspect & clean text** or click the length in the status bar. Count words and graphemes in the document, selection, or loaded page. Choose whether to trim trailing spaces and tabs, convert nonbreaking spaces, or remove zero-width spaces. Preview up to six changed lines and undo the cleanup in one step.
+- **Keep file formats under your control.** Reopen with a different encoding or explicitly convert on save. Reopening a Unicode file keeps its byte-order mark (BOM) setting. See line endings in the status bar and choose when to standardize a mixed file. Use **Save a copy** to write to a separate file.
+- **Pick up an interrupted edit.** Compare external disk changes before saving. Session recovery restores the last completed local snapshot. With recovery turned off, quitting with unsaved changes offers **Save All**, **Discard Changes**, and **Cancel**.
+- **Preview changes across a folder.** Find literal text, escapes, or Boost.Regex patterns. Filter by filename pattern and depth, see before and after, and choose the files to change. Margin checks that the disk files still match the preview before applying it.
+- **Find a line in a large log.** Search across pages with literal text or escapes, jump to the result, and edit the loaded page. Saving a page preserves bytes outside it in supported encodings.
 
-[Release notes and assets](https://github.com/peterwangze/margin-editor/releases/tag/v0.9.1) · [SHA-256 checksums](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/SHA256SUMS.txt)
+![Inspect & clean text lists invisible characters by Unicode code point and previews an opt-in cleanup on the selected text.](docs/screenshots/inspect.png)
 
-![Margin's Paper theme with a grouped toolbar, document tabs, full-width editor, and interactive status bar](docs/screenshots/workbench.png)
+*Inspect the selected text, see what the cleanup changes, and keep editing before you save.*
 
-## From a quick edit to a folder-wide change
-
-- **Open straight into a document.** Start typing in a blank file, drop local files into the window, or use the familiar toolbar. The folder tree opens on demand. Split or clone a document when you need another view.
-- **Bring your Notepad++ setup.** Import sessions with bookmarks and recoverable backups, common preferences, supported menu shortcuts, and user languages with keyword colors, delimiters, and folds.
-- **Review replacements before writing.** Find literal text, extended escapes, or Boost.Regex captures. Filter folder searches by glob and depth, review before-and-after results, and choose which files to update. Margin checks that files still match the preview before applying it.
-- **Keep control of your files.** Reopen with a different encoding, convert on save, or pick an EOL format from the status bar. When a file changes on disk, compare the two versions and choose how to proceed. Optional backup copies preserve the previous bytes.
-- **Work on a large log one page at a time.** Search across all pages and jump to a match. Edit the page and save while preserving the untouched bytes in supported encodings.
-- **Turn repetitive edits into commands.** Use rectangular selections, multiple cursors, bookmarks, line transformations, and replayable edit macros. Open the command palette to find JSON formatting, Markdown preview, encoding utilities, and local tools.
-
-![In-document Find and Replace with a highlighted match and accessible controls](docs/screenshots/find.png)
+![The docked Find and Replace bar leaves the document in view and highlights the current match.](docs/screenshots/find.png)
 
 ## Install offline
 
-| Platform | Offline packages | How to start |
-| --- | --- | --- |
-| Windows | NSIS `setup.exe`, portable `.exe` | Run Setup or launch the portable executable. |
-| macOS | `.dmg`, `.zip` | Copy `Margin.app` to Applications. Use the package matching your Mac's processor. |
-| Linux | `.AppImage`, `.deb` | Make the AppImage executable, or install the DEB with your local package manager. AppImage requires FUSE or can be run with `--appimage-extract-and-run`. |
+Open the release and choose the asset for your system and processor. The release also includes `SHA256SUMS.txt` to verify your download. [Releases and offline downloads](https://github.com/peterwangze/margin-editor/releases) · [Earlier 0.9.1 packages](https://github.com/peterwangze/margin-editor/releases/tag/v0.9.1)
 
-Packages bundle Electron and the UI assets. Linux still uses the system's desktop libraries. Builds have no publisher certificate or Apple notarization. Verify the download with the `SHA256SUMS.txt` published with the release.
+| Platform | Intel or AMD 64-bit | ARM64 | How to start |
+| --- | --- | --- | --- |
+| Windows | `win-x64-setup.exe`, `win-x64-portable.exe` | `win-arm64-setup.exe`, `win-arm64-portable.exe` | Run Setup or launch the portable EXE. |
+| macOS | `mac-x64.dmg`, `mac-x64.zip` | `mac-arm64.dmg`, `mac-arm64.zip` | Open the DMG or unzip the ZIP, then copy `Margin.app` into Applications. |
+| Linux | `linux-x86_64.AppImage`, `linux-amd64.deb` | `linux-arm64.AppImage`, `linux-arm64.deb` | Make the AppImage executable or install the DEB with your package manager. With no FUSE, use `--appimage-extract-and-run`. |
+
+The packages include the application runtime. Linux uses the system's desktop libraries. See the release notes for platform-specific signing and installation details.
+
+## Keyboard shortcuts
 
 | Action | Windows / Linux | macOS |
 | --- | --- | --- |
-| Command palette | Ctrl+Shift+P | ⌘⇧P |
-| Quick open | Ctrl+P | ⌘P |
+| Open file | Ctrl+O | ⌘O |
+| Save | Ctrl+S | ⌘S |
 | Find / Replace | Ctrl+F / Ctrl+H | ⌘F / ⌘H |
 | Find in Files | Ctrl+Shift+F | ⌘⇧F |
 | Go to line | Ctrl+G | ⌘G |
 | Split editor | Ctrl+\ | ⌘\ |
+| Find a command | Ctrl+Shift+P | ⌘⇧P |
 
 ## Compatibility
 
-The [Notepad++ comparison](docs/research.md) and [acceptance checklist](docs/acceptance.md) track coverage and remaining work, including native Win32 plugins, full UDL behavior, regex edge cases, and whole-file regex replace in large documents. The [test and packaging workflow](.github/workflows/build.yml) records each build's platform coverage.
+Margin imports common Notepad++ session details, settings, menu shortcuts, project trees, and part of the user-defined language format. Native Notepad++ plugins and original macro files require Notepad++. Large-file regular expressions work within the loaded page. [Product scope and limits](docs/research.md) · [Release acceptance checklist](docs/acceptance.md) · [Architecture](docs/architecture.md)
 
 ## Develop locally
 

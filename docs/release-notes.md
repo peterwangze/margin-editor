@@ -2,21 +2,21 @@
 
 | Platform | Intel / AMD 64-bit | ARM64 |
 | --- | --- | --- |
-| Windows | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-x64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-x64-portable.exe) | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-arm64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-arm64-portable.exe) |
-| macOS | [DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-x64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-x64.zip) | [Apple Silicon DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-arm64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-arm64.zip) |
-| Linux | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-x86_64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-amd64.deb) | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-arm64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-arm64.deb) |
+| Windows | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-win-x64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-win-x64-portable.exe) | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-win-arm64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-win-arm64-portable.exe) |
+| macOS | [DMG](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-mac-x64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-mac-x64.zip) | [Apple Silicon DMG](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-mac-arm64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-mac-arm64.zip) |
+| Linux | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-linux-x86_64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-linux-amd64.deb) | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-linux-arm64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/Margin-1.0.0-linux-arm64.deb) |
 
-[SHA-256 checksums](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/SHA256SUMS.txt)
+[SHA-256 checksums](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/SHA256SUMS.txt)
 
-Margin 0.9.1 opens to a document-first editor with a grouped toolbar, full-width tabs, and a bottom Find and Replace panel. Open the file tree or outline from View when you need it.
+Margin 1.0.0 is an offline editor for notes, lists, logs, and everyday plain text. Start typing in a blank document, open an existing file, or drop one into the window. Menus, grouped tools, and document tabs stay in view.
 
-- Find and replace within a document, or review folder-wide replacements before applying selected files.
-- Regular expression search and replace uses the bundled Boost.Regex 1.92 engine. It supports patterns such as `\K` and named-group replacements such as `$+{name}`.
-- Inspect encoding and line endings from the status bar. Compare external changes and keep optional backups on save.
-- Use the command palette for bookmarks, column editing, macros, JSON formatting, Markdown preview, and text conversions.
-- Import Notepad++ XML sessions and project trees, common preferences, supported menu shortcuts, and UDLs with keyword colors, comments, operators, delimiters and folds.
-- Edit large files a page at a time in supported encodings. Find text across pages in Normal or Extended mode, jump to a match, and save the page without altering the other bytes.
+- **Clean up pasted text with a preview.** Choose **Edit → Inspect & clean text** or click Length in the status bar. Count words and characters, identify no-break and zero-width spaces, and apply only the cleanup options you select. One Undo restores the original.
+- **Keep your file format and edits safe.** Reopening a Unicode file preserves its BOM. Changing the encoding is a separate action. If you turn off session recovery, quitting with dirty files offers Save All, Discard Changes, or Cancel. Saving a copy cannot overwrite its source.
+- **Review changes across files.** Find literal text, escapes, or Boost regular expressions, preview folder replacements, and apply selected files only. Margin checks whether those files changed on disk before writing.
+- **Work on large logs.** Find a match across pages in Normal or Extended mode, jump to it, and save the loaded page without rewriting other bytes in supported encodings.
 
-Choose the package for your processor. Windows packages are NSIS setup and portable EXE, macOS packages are DMG and ZIP, and Linux packages are AppImage and DEB. `SHA256SUMS.txt` covers every binary. The packages carry the runtime and local assets. Linux requires the host's desktop libraries. Windows builds lack a publisher signature, and macOS builds are ad hoc signed without notarization.
+Choose the package for your processor. The packages carry the runtime and local assets; `SHA256SUMS.txt` covers every binary. Linux requires the host's desktop libraries. On Linux without FUSE, run the AppImage with `--appimage-extract-and-run`.
 
-The [acceptance checklist](https://github.com/peterwangze/margin-editor/blob/main/docs/acceptance.md) records outstanding plugin ABI, regex edge cases, UDL, platform integration, and manual validation requirements.
+Windows builds lack a publisher signature, and macOS builds are ad hoc signed without notarization. Verify the SHA-256 before opening; your OS or organization may require approval to launch. Notepad++'s native Windows plugins and original macro files are outside this release's compatibility.
+
+[Product research and scope](https://github.com/peterwangze/margin-editor/blob/v1.0.0/docs/research.md) · [Acceptance checklist and results](https://github.com/peterwangze/margin-editor/blob/main/docs/acceptance.md)

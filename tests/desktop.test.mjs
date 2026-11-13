@@ -1,5 +1,8 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
+import {once} from 'node:events'
+import {execFile} from 'node:child_process'
+import {promisify} from 'node:util'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -225,4 +228,130 @@ test('I05 deleting and undoing a mixed line break restores its exact format', {t
   await page.keyboard.press(`${mod}+s`)
   await expect(page.getByText('Saved mixed.txt', {exact: true})).toBeVisible()
   assert.equal(await fs.readFile(file, 'utf8'), 'a\r\nb!\nc\r\n')
+})
+
+test('I05 reopening with a Unicode encoding preserves the BOM and Save a Copy leaves the source alone', {timeout: 45000}, async t => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-encoding-ui-'))
+  const profile = path.join(temp, 'profile')
+  await fs.mkdir(profile)
+  const file = path.join(temp, 'original.txt')
+  const copy = path.join(temp, 'copy.txt')
+  const original = encode({encoding: 'UTF-8 BOM', text: 'begin\n', eol: 'CRLF'})
+  const edited = encode({encoding: 'UTF-8 BOM', text: 'after 中\n', eol: 'CRLF'})
+  await fs.writeFile(file, original)
+  const {app, page} = await launch(profile, [file])
+  t.after(async () => {
+    await app.close().catch(() => {})
+    await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  await expect(page.getByRole('tab', {name: 'original.txt', exact: true})).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('button', {name: 'Encoding', exact: true}).click()
+  await page.getByRole('button', {name: 'Reopen with encoding…', exact: true}).click()
+  const reopen = page.getByRole('dialog', {name: 'Reopen with encoding'})
+  await reopen.getByLabel('Interpret disk bytes as').selectOption('UTF-8')
+  await reopen.getByRole('button', {name: 'Apply', exact: true}).click()
+  await expect(reopen).toBeHidden()
+  await expect(page.getByRole('button', {name: 'UTF-8 BOM', exact: true})).toBeVisible()
+  const editor = page.getByRole('textbox', {name: 'Document editor'})
+  await editor.click()
+  await page.keyboard.press(`${mod}+a`)
+  await page.keyboard.insertText('after 中\n')
+  const saveCopy = async destination => {
+    await app.evaluate(({dialog}, filePath) => {
+      dialog.showSaveDialog = async () => ({canceled: false, filePath})
+    }, destination)
+    await page.getByRole('button', {name: 'File', exact: true}).click()
+    await page.getByRole('button', {name: 'Save a copy…', exact: true}).click()
+  }
+  await saveCopy(file)
+  await expect(page.getByText('Choose a different file for the copy.', {exact: true})).toBeVisible()
+  assert.deepEqual(await fs.readFile(file), original)
+  await saveCopy(copy)
+  await expect(page.getByText('Saved copy.txt', {exact: true})).toBeVisible()
+  assert.deepEqual(await fs.readFile(copy), edited)
+  assert.deepEqual(await fs.readFile(file), original)
+  await expect(page.getByRole('tab', {name: /original.txt Unsaved/})).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press(`${mod}+s`)
+  await expect(page.getByText('Saved original.txt', {exact: true})).toBeVisible()
+  assert.deepEqual(await fs.readFile(file), edited)
+})
+
+test('I07 quitting without session recovery keeps edits if Save All is canceled', {timeout: 45000}, async t => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-quit-ui-'))
+  const profile = path.join(temp, 'profile')
+  await fs.mkdir(profile)
+  await fs.writeFile(path.join(profile, 'session.json'), JSON.stringify({version: 1, settings: {recover: false}}))
+  const saved = path.join(temp, 'kept.txt')
+  const {app, page} = await launch(profile)
+  t.after(async () => {
+    await app.close().catch(() => {})
+    await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  await page.getByRole('textbox', {name: 'Document editor'}).click()
+  await page.keyboard.insertText('keep my notes 中')
+  await app.evaluate(({dialog, BrowserWindow}) => {
+    dialog.showMessageBox = async (_window, options) => {
+      if (options.buttons.join('|') !== 'Save All|Discard Changes|Cancel') throw new Error('Unexpected quit options')
+      return {response: 0}
+    }
+    dialog.showSaveDialog = async () => ({canceled: true})
+    BrowserWindow.getAllWindows()[0].close()
+  })
+  await expect(page.getByRole('tab', {name: /Untitled 1 Unsaved/})).toBeVisible()
+  await expect(page.locator('.cm-content')).toContainText('keep my notes 中')
+  await expect.poll(() => app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows().length)).toBe(1)
+  await Promise.all([
+    page.waitForEvent('close'),
+    app.evaluate(({dialog, BrowserWindow}, filePath) => {
+      dialog.showSaveDialog = async () => ({canceled: false, filePath})
+      setTimeout(() => BrowserWindow.getAllWindows()[0]?.close(), 40)
+    }, saved),
+  ])
+  assert.equal(await fs.readFile(saved, 'utf8'), 'keep my notes 中')
+})
+
+test('I07 restores a scratch tab and unsaved edits after the app is force terminated', {timeout: 60000}, async t => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-crash-recovery-'))
+  const profile = path.join(temp, 'profile')
+  const snapshot = path.join(profile, 'session.json')
+  const filename = path.join(temp, 'notes.txt')
+  const original = Buffer.from('original notes\r\n')
+  await fs.mkdir(profile)
+  await fs.writeFile(filename, original)
+  let {app, page} = await launch(profile, [filename])
+  t.after(async () => {
+    await app.close().catch(() => {})
+    await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  await expect(page.getByRole('tab', {name: 'notes.txt', exact: true})).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('textbox', {name: 'Document editor'}).click()
+  await page.keyboard.press(`${mod}+a`)
+  await page.keyboard.insertText('unsaved notes 中')
+  await page.keyboard.press(`${mod}+n`)
+  await expect(page.getByRole('tab', {name: 'Untitled 2', exact: true})).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.insertText('scratch café')
+
+  await expect.poll(async () => {
+    try {
+      const {docs} = JSON.parse(await fs.readFile(snapshot, 'utf8'))
+      return docs.filter(doc => doc.dirty).map(doc => doc.text)
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      return []
+    }
+  }).toEqual(['unsaved notes 中', 'scratch café'])
+  const child = app.process()
+  const stopped = once(child, 'exit')
+  if (process.platform === 'win32') await promisify(execFile)('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {windowsHide: true})
+  // Playwright launches Electron in its own process group on POSIX.
+  else assert.equal(process.kill(-child.pid, 'SIGKILL'), true)
+  await stopped
+  assert.deepEqual(await fs.readFile(filename), original)
+
+  ;({app, page} = await launch(profile))
+  await expect(page.getByRole('tab', {name: /Untitled 2 Unsaved/})).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('textbox', {name: 'Document editor'})).toContainText('scratch café')
+  await page.getByRole('tab', {name: /notes.txt Unsaved/}).click()
+  await expect(page.getByRole('textbox', {name: 'Document editor'})).toContainText('unsaved notes 中')
+  assert.deepEqual(await fs.readFile(filename), original)
 })

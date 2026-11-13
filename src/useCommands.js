@@ -1,5 +1,5 @@
 import {EditorSelection} from '@codemirror/state'
-import {undo, redo, selectAll, copyLineDown, deleteLine, moveLineUp, moveLineDown, toggleLineComment, toggleBlockComment, indentMore, indentLess} from '@codemirror/commands'
+import {undo, redo, selectAll, copyLineDown, deleteLine, moveLineUp, moveLineDown, toggleLineComment, toggleBlockComment, indentMore, indentLess, isolateHistory} from '@codemirror/commands'
 import {foldAll, unfoldAll, syntaxTree} from '@codemirror/language'
 import {selectNextOccurrence} from '@codemirror/search'
 import {highlightTree, classHighlighter} from '@lezer/highlight'
@@ -186,6 +186,23 @@ export function useCommands(ctx) {
       insertAtSelections(m.selectedView(), (_, index) => value.first === '' ? value.value : `${value.value}${String(Number(value.first) + index * Number(value.step)).padStart(Number(value.pad), '0')}`)
     }, 'Use Alt+drag to select a column or add multiple cursors before inserting.'),
     readOnly: () => { if (!doc.lossy) m.amend(doc.id, {readOnly: !doc.readOnly}) },
+    inspectText: () => {
+      const view = m.selectedView()
+      if (!view) return
+      const {state} = view
+      const text = state.doc.toString()
+      const selection = state.selection.ranges.filter(range => !range.empty).map(({from, to}) => ({from, to}))
+      setDialog({kind: 'inspect-text', snapshot: {
+        text, readOnly: state.readOnly, documentLabel: doc.large ? 'Loaded page' : 'Whole document',
+        scopes: {document: [{from: 0, to: text.length}], ...(selection.length ? {selection} : {})},
+        partialLastLine: Boolean(doc.large && doc.large.index < doc.large.pages - 1 && !text.endsWith('\n')),
+        apply: changes => {
+          if (!view.dom.isConnected || view.state.doc !== state.doc || view.state.readOnly) throw new Error('The document changed. Reopen the inspector to review it again.')
+          view.dispatch({changes, userEvent: 'input.cleanup', annotations: isolateHistory.of('full')})
+          focusEditor(view)
+        },
+      }})
+    },
     insertDate: () => insertAtSelections(m.selectedView(), () => new Date().toLocaleString()),
     characters: () => textDialog('Insert character', [field('code', 'Unicode code point (hex)', '00A0', {required: true})], ({code}) => {
       const clean = code.replace(/^U\+|^0x/i, '')
@@ -205,7 +222,7 @@ export function useCommands(ctx) {
     tail: () => setTail(value => value === doc.id ? null : doc.id), fullscreen: () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(),
     zoomIn: () => setting({fontSize: Math.min(36, m.settings.fontSize + 1)}), zoomOut: () => setting({fontSize: Math.max(10, m.settings.fontSize - 1)}), zoomReset: () => setting({fontSize: 15}), theme: setTheme,
     convert: () => textDialog('Convert encoding', [field('encoding', 'Save as encoding', doc.encoding, {options: encodings})], ({encoding}) => setFormat(encoding), 'Save writes the new encoding after a lossless round-trip check.'),
-    reinterpret: () => textDialog('Reopen with encoding', [field('encoding', 'Interpret disk bytes as', doc.encoding, {options: encodings})], ({encoding}) => m.reload(doc, encoding)),
+    reinterpret: () => textDialog('Reopen with encoding', [field('encoding', 'Interpret disk bytes as', doc.encoding, {options: encodings})], ({encoding}) => m.reload(doc, encoding), 'Reopen reads the file without changing its bytes. Use Convert encoding to change the file format.'),
     lf: () => setFormat(null, 'LF'), crlf: () => setFormat(null, 'CRLF'), cr: () => setFormat(null, 'CR'),
     language: () => pick('Select Language', ['Plain Text', ...languageNames, ...m.settings.languages.map(item => item.name)].map(id => ({id, label: id})), item => m.amend(doc.id, {language: item.id})),
     customLanguage: () => textDialog('Custom language', [field('name', 'Name', '', {required: true}), field('extensions', 'File extensions (space separated)', ''), field('keywords', 'Keywords', '', {type: 'textarea'}), field('comment', 'Line comment prefix', '#'), field('outline', 'Outline regex (optional)', '')], value => {

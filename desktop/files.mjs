@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import {createHash, randomUUID} from 'node:crypto'
-import {decode, decodeSegment, encode} from './codec.mjs'
+import {decode, decodeSegment, encode, encodingFromHeader} from './codec.mjs'
 
 export const EDIT_LIMIT = 48 * 1024 * 1024
 export const PAGE_SIZE = 1024 * 1024
@@ -68,6 +68,7 @@ export async function readLargePage(filename, requested, page = 0) {
       const guessed = decode(sample).encoding
       encoding = valid && guessed === 'Windows-1252' ? 'UTF-8' : guessed
     }
+    encoding = encodingFromHeader(sample, encoding)
     const buffer = Buffer.alloc(length)
     let read = 0
     while (read < length) {

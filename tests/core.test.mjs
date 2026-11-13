@@ -35,6 +35,26 @@ test('F05 preserves Unicode BOMs, legacy encodings and mixed line endings', () =
   assert.equal(withNewlines({...doc, mixed: updateMixed(doc.text, doc.mixed, change, doc.eol), text: replaceMatches(doc.text, change)}), 'new\r\na\r\nb\nc\r')
 })
 
+test('F05 reopening a Unicode charset retains the BOM state of the source bytes', () => {
+  const pairs = [
+    ['UTF-8 BOM', 'UTF-8'],
+    ['UTF-16 LE', 'UTF-16 LE (no BOM)'],
+    ['UTF-16 BE', 'UTF-16 BE (no BOM)'],
+    ['UTF-32 LE', 'UTF-32 LE (no BOM)'],
+    ['UTF-32 BE', 'UTF-32 BE (no BOM)'],
+  ]
+  for (const [withBom, withoutBom] of pairs) {
+    for (const [original, requested] of [[withBom, withoutBom], [withoutBom, withBom]]) {
+      const bytes = encode({encoding: original, text: 'Hi 中🙂\n', eol: 'CRLF'})
+      const reopened = decode(bytes, requested)
+      assert.equal(reopened.encoding, original)
+      assert.equal(reopened.text, 'Hi 中🙂\n')
+      assert.equal(reopened.lossy, false)
+      assert.deepEqual(encode(reopened), bytes)
+    }
+  }
+})
+
 test('F03 distinguishes literal, extended, regex, word and selection search', () => {
   assert.equal(findMatches('x. x x.', {...emptyQuery, needle: 'x.'}).matches.length, 2)
   assert.equal(findMatches('foo\nbar', {...emptyQuery, needle: 'foo\\nbar', mode: 'extended'}).matches.length, 1)

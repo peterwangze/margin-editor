@@ -18,12 +18,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {platform: win, arch: x64, runner: windows-2025, smoke: true}
-          - {platform: win, arch: arm64, runner: windows-2025, smoke: false}
-          - {platform: mac, arch: x64, runner: macos-15-intel, smoke: true}
-          - {platform: mac, arch: arm64, runner: macos-15, smoke: true}
-          - {platform: linux, arch: x64, runner: ubuntu-24.04, smoke: true}
-          - {platform: linux, arch: arm64, runner: ubuntu-24.04-arm, smoke: true}
+          - {platform: win, arch: x64, runner: windows-2025}
+          - {platform: win, arch: arm64, runner: windows-11-arm}
+          - {platform: mac, arch: x64, runner: macos-15-intel}
+          - {platform: mac, arch: arm64, runner: macos-15}
+          - {platform: linux, arch: x64, runner: ubuntu-24.04}
+          - {platform: linux, arch: arm64, runner: ubuntu-24.04-arm}
     defaults:
       run:
         shell: bash
@@ -33,6 +33,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Require native Node runtime
+        run: node -e 'require("node:assert/strict").equal(process.arch, process.argv[1])' ${{ matrix.arch }}
       - run: npm ci
       - run: npm test
       - if: matrix.platform == 'linux' && matrix.arch == 'x64'
@@ -44,46 +46,27 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run package -- --${{ matrix.platform }} --${{ matrix.arch }}
-      - name: Smoke test the built application
-        if: matrix.smoke
-        timeout-minutes: 6
+      - name: Prepare Linux desktop libraries
+        if: matrix.platform == 'linux'
         run: |
-          case '${{ matrix.platform }}' in
-            win)
-              export MARGIN_EXECUTABLE="$(cygpath -w "$PWD/release/win-unpacked/Margin.exe")"
-              npm run test:desktop
-              ;;
-            mac)
-              export MARGIN_EXECUTABLE="$(find "$PWD/release" -path '*/Margin.app/Contents/MacOS/Margin' -type f | head -1)"
-              test -x "$MARGIN_EXECUTABLE"
-              node tests/packaged-smoke.mjs
-              ;;
-            linux)
-              deb=$(find "$PWD/release" -maxdepth 1 -name '*.deb' -type f)
-              dpkg-deb -x "$deb" "$RUNNER_TEMP/margin-deb"
-              export MARGIN_EXECUTABLE="$(find "$RUNNER_TEMP/margin-deb" -name margin -type f | head -1)"
-              test -x "$MARGIN_EXECUTABLE"
-              xvfb-run -a npm run test:desktop
-              ;;
-          esac
-      - name: Verify NSIS install and uninstall
-        if: matrix.platform == 'win' && matrix.arch == 'x64'
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb xauth desktop-file-utils libgtk-3-0t64 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libatspi2.0-0t64 libuuid1 libsecret-1-0 libasound2t64
+      - name: Accept Windows offline packages
+        if: matrix.platform == 'win'
         shell: pwsh
-        timeout-minutes: 5
-        run: |
-          $installer = (Get-ChildItem release -Filter '*-setup.exe').FullName
-          $target = Join-Path $env:RUNNER_TEMP 'margin-offline-install'
-          $install = Start-Process -FilePath $installer -ArgumentList '/S', "/D=$target" -WindowStyle Hidden -Wait -PassThru
-          if ($install.ExitCode -ne 0) { throw "NSIS exit code $($install.ExitCode)" }
-          $env:MARGIN_EXECUTABLE = Join-Path $target 'Margin.exe'
-          try {
-            npm.cmd run test:desktop
-            if ($LASTEXITCODE -ne 0) { throw 'Installed application smoke tests failed' }
-          } finally {
-            $uninstaller = (Get-ChildItem -LiteralPath $target -Filter 'Uninstall*.exe').FullName
-            if ($uninstaller) { Start-Process -FilePath $uninstaller -ArgumentList '/S' -WindowStyle Hidden -Wait }
-          }
-          if (Test-Path -LiteralPath $env:MARGIN_EXECUTABLE) { throw 'Uninstall left Margin.exe behind' }
+        timeout-minutes: 9
+        run: ./tests/accept-windows.ps1 -Arch ${{ matrix.arch }} -Evidence acceptance
+      - name: Accept macOS and Linux offline packages
+        if: matrix.platform != 'win'
+        timeout-minutes: 9
+        run: bash tests/accept-unix.sh ${{ matrix.platform }} ${{ matrix.arch }} "$PWD/acceptance"
+      - uses: actions/upload-artifact@v4
+        if: success() || failure()
+        with:
+          name: acceptance-${{ matrix.platform }}-${{ matrix.arch }}
+          path: acceptance/
+          if-no-files-found: ignore
+          compression-level: 0
       - uses: actions/upload-artifact@v4
         with:
           name: Margin-${{ matrix.platform }}-${{ matrix.arch }}

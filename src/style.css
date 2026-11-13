@@ -205,6 +205,27 @@ svg { flex: none; vertical-align: middle; stroke-width: 1.65; }
 .form .checkbox { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .form-detail, .panel-empty { margin: 4px 0; color: var(--muted); }
 .form-actions, .settings-links { display: flex; flex-wrap: wrap; justify-content: end; gap: 7px; }
+.inspect-dialog { width: min(560px, calc(100vw - 36px)); max-height: min(88vh, 760px); }
+.inspect-form { gap: 12px; }
+.inspect-status:hover { color: var(--accent-strong); }
+.inspect-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--canvas); }
+.inspect-metrics > div { padding: 8px 10px; min-width: 0; }
+.inspect-metrics > div + div { border-left: 1px solid var(--line); }
+.inspect-metrics dt, .inspect-change small { color: var(--muted); font-size: 12px; }
+.inspect-metrics dd { font-size: 18px; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+.inspect-inventory { max-height: 112px; overflow: auto; }
+.inspect-inventory ul { padding: 0; margin: 0; list-style: none; }
+.inspect-inventory li { display: grid; grid-template-columns: 8ch 1fr auto; align-items: baseline; gap: 6px; padding: 3px 0; }
+.inspect-inventory code, .inspect-change code { font-family: 'IBM Plex Mono', monospace; }
+.inspect-options { display: grid; gap: 5px; border: 1px solid var(--line); border-radius: 5px; margin: 0; padding: 7px 10px 9px; min-width: 0; }
+.inspect-options .checkbox { justify-content: flex-start; }
+.inspect-options legend { color: var(--muted); padding-inline: 4px; }
+.inspect-preview { border: 1px solid var(--line); border-radius: 5px; max-height: 226px; overflow: auto; background: var(--canvas); }
+.inspect-preview p { padding: 7px 10px; margin: 0; color: var(--muted); }
+.inspect-change { display: grid; padding: 7px 10px; gap: 4px; border-top: 1px solid var(--line); }
+.inspect-change > span { color: var(--muted); font-size: 12px; }
+.inspect-change > div { display: grid; grid-template-columns: 6ch minmax(0, 1fr); gap: 6px; }
+.inspect-change code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .settings-links { justify-content: start; }
 .settings-checks { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; }
 .workspace-search { flex-basis: min(320px, 40vw); }
