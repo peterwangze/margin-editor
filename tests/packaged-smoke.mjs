@@ -236,6 +236,18 @@ try {
   await expect(page.getByText('Saved offline.txt', {exact: true})).toBeVisible()
   assert.equal(await fs.readFile(file, 'utf8'), 'local edit\r\n中🙂\r\ncopy this')
 
+  // The restart harness terminates the process. Wait for the last recovery
+  // snapshot to reflect the completed save, so it cannot reopen an older draft.
+  await expect.poll(async () => {
+    try {
+      const session = JSON.parse(await fs.readFile(path.join(profile, 'session.json'), 'utf8'))
+      const saved = session.docs.find(doc => doc.name === 'offline.txt')
+      return {text: saved?.text, dirty: saved?.dirty}
+    } catch (error) {
+      if (error.code === 'ENOENT' || error instanceof SyntaxError) return null
+      throw error
+    }
+  }).toEqual({text: 'local edit\n中🙂\ncopy this', dirty: false})
   await shutdown()
   await launch()
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')

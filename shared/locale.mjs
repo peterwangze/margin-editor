@@ -4,6 +4,7 @@ export const interfaceLanguages = [
 ]
 
 const supported = new Set(interfaceLanguages.map(({value}) => value))
+const languageVariants = interfaceLanguages.map(({value}) => ({value, locale: new Intl.Locale(value).maximize()}))
 
 export function languagePreference(value) {
   return supported.has(value) ? value : 'system'
@@ -19,12 +20,11 @@ export function interfaceLocale(preference, preferredLanguages = []) {
     } catch {
       continue
     }
-    if (candidate.language === 'zh') {
-      if (candidate.maximize().script === 'Hans') return 'zh-CN'
-      continue
-    }
     if (supported.has(candidate.baseName)) return candidate.baseName
-    if (supported.has(candidate.language)) return candidate.language
+    const maximized = candidate.maximize()
+    const compatible = languageVariants.filter(({locale}) => locale.language === maximized.language && locale.script === maximized.script)
+    const match = compatible.find(({locale}) => locale.region === maximized.region) ?? compatible[0]
+    if (match) return match.value
   }
   return 'en'
 }
