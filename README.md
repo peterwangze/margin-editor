@@ -26,7 +26,7 @@ Choose the offline package for your operating system and processor. This version
 
 - **Open straight into a document.** Start typing in a blank file, drop local files into the window, or use the familiar toolbar. The folder tree opens on demand. Split or clone a document when you need another view.
 - **Bring your Notepad++ setup.** Import sessions with bookmarks and recoverable backups, common preferences, supported menu shortcuts, and user languages with keyword colors, delimiters, and folds.
-- **Review replacements before writing.** Find literal text, extended escapes, or regex captures. Filter folder searches by glob and depth, review before-and-after results, and choose which files to update. Margin checks that files still match the preview before applying it.
+- **Review replacements before writing.** Find literal text, extended escapes, or Boost.Regex captures. Filter folder searches by glob and depth, review before-and-after results, and choose which files to update. Margin checks that files still match the preview before applying it.
 - **Keep control of your files.** Reopen with a different encoding, convert on save, or pick an EOL format from the status bar. When a file changes on disk, compare the two versions and choose how to proceed. Optional backup copies preserve the previous bytes.
 - **Work on a large log one page at a time.** Search across all pages and jump to a match. Edit the page and save while preserving the untouched bytes in supported encodings.
 - **Turn repetitive edits into commands.** Use rectangular selections, multiple cursors, bookmarks, line transformations, and replayable edit macros. Open the command palette to find JSON formatting, Markdown preview, encoding utilities, and local tools.
@@ -54,7 +54,7 @@ Packages bundle Electron and the UI assets. Linux still uses the system's deskto
 
 ## Compatibility
 
-The [Notepad++ comparison](docs/research.md) and [acceptance checklist](docs/acceptance.md) track coverage and remaining work, including native Win32 plugins, full UDL behavior, Boost regex, and whole-file regex replace in large documents. The [test and packaging workflow](.github/workflows/build.yml) records each build's platform coverage.
+The [Notepad++ comparison](docs/research.md) and [acceptance checklist](docs/acceptance.md) track coverage and remaining work, including native Win32 plugins, full UDL behavior, regex edge cases, and whole-file regex replace in large documents. The [test and packaging workflow](.github/workflows/build.yml) records each build's platform coverage.
 
 ## Develop locally
 

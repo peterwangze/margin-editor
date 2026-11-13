@@ -63,6 +63,17 @@ test('I02/I03 actual input, regex, replace, undo and session reload', async ({pa
   expect(failures).toEqual([])
 })
 
+test('I03 executes a Notepad++ Boost pattern and named replacement in the editor worker', async ({page}) => {
+  await page.keyboard.insertText('label: value')
+  await page.keyboard.press(`${control}+h`)
+  await page.getByRole('textbox', {name: 'Find', exact: true}).fill('^label: \\K(?<word>value)')
+  await page.getByRole('button', {name: 'Regular expression'}).click()
+  await page.getByRole('textbox', {name: 'Replace', exact: true}).fill('\\U$+{word}\\E')
+  await expect(page.getByText('1 of 1')).toBeVisible()
+  await page.getByRole('button', {name: 'Replace All'}).click()
+  await expect(lines(page)).toHaveText(['label: VALUE'])
+})
+
 test('I04/I08 split and clone edit, macro replay and Markdown preview', async ({page}) => {
   await command(page, 'Open sample documents')
   await page.getByRole('tab', {name: 'welcome.md'}).click()

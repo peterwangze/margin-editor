@@ -6,6 +6,7 @@ import path from 'node:path'
 import {encode, decode} from '../desktop/codec.mjs'
 import {readDocument, saveDocument, readLargePage, saveLargePage, EDIT_LIMIT, PAGE_SIZE} from '../desktop/files.mjs'
 import {searchLargeFile} from '../desktop/large-search.mjs'
+import {findBoostMatches} from '../shared/boost-regex.mjs'
 import {searchWorkspace, applyWorkspace} from '../desktop/workspace.mjs'
 import {findMatches, replaceMatches, emptyQuery, newlines, withNewlines, updateMixed, encodings} from '../shared/text.mjs'
 import {formatJsonText} from '../shared/json.mjs'
@@ -45,6 +46,13 @@ test('F03 distinguishes literal, extended, regex, word and selection search', ()
   assert.equal(findMatches('🙂!', {...emptyQuery, needle: '(?=.)', mode: 'regex'}).matches.length, 2)
   assert.throws(() => findMatches('x', {...emptyQuery, needle: '(', mode: 'regex'}), SyntaxError)
   assert.equal(findMatches('xx', {...emptyQuery, needle: 'x'}, {limit: 1}).truncated, true)
+})
+
+test('F03 Boost search supports Notepad++ reset, newline, anchors and case conversions', async () => {
+  const module = await WebAssembly.compile(await fs.readFile(new URL('../shared/boost-regex.wasm', import.meta.url)))
+  const pattern = {...emptyQuery, mode: 'regex', needle: '\\Aé😀\\Rprefix: \\K(?<word>value)\\z', replacement: '\\U$+{word}\\E'}
+  assert.deepEqual(findBoostMatches(module, 'é😀\nprefix: value', pattern).matches, [{from: 12, to: 17, insert: 'VALUE'}])
+  assert.throws(() => findBoostMatches(module, 'x', {...pattern, needle: '('}), /Invalid Boost regular expression/)
 })
 
 test('F01/F07 atomically save, back up and reject a stale fingerprint', async t => {

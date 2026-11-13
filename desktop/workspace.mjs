@@ -1,10 +1,19 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import {minimatch} from 'minimatch'
-import {compile, findMatches, replaceMatches, updateMixed} from '../shared/text.mjs'
+import {findMatches, replaceMatches, updateMixed} from '../shared/text.mjs'
+import {findBoostMatches} from '../shared/boost-regex.mjs'
 import {readDocument, saveDocument} from './files.mjs'
 
 const skippedDirs = new Set(['.git', '.hg', '.svn', 'node_modules', '.venv'])
+let boost
+
+async function matcher(query) {
+  if (query.mode !== 'regex') return (text, range) => findMatches(text, query, range)
+  boost ??= await WebAssembly.compile(await fs.readFile(new URL('../shared/boost-regex.wasm', import.meta.url)))
+  findBoostMatches(boost, '', query, {limit: 0})
+  return (text, range) => findBoostMatches(boost, text, query, range)
+}
 
 async function* walk(root, depth, counters) {
   const directory = await fs.opendir(root)
@@ -20,7 +29,8 @@ async function* walk(root, depth, counters) {
 }
 
 export async function searchWorkspace(root, query, {glob = '*', depth = 12, preview = false} = {}) {
-  if (!compile(query)) return {files: [], total: 0, skipped: 0, truncated: false}
+  if (!query.needle) return {files: [], total: 0, skipped: 0, truncated: false}
+  const matchesFor = await matcher(query)
   const patterns = glob.split(',').map(value => value.trim()).filter(Boolean)
   const counters = {entries: 0, skipped: 0}
   const files = []
@@ -37,7 +47,7 @@ export async function searchWorkspace(root, query, {glob = '*', depth = 12, prev
       const doc = await readDocument(file)
       scannedBytes += doc.size
       if (doc.binary || (preview && doc.lossy)) { counters.skipped++; continue }
-      const {matches, truncated: capped} = findMatches(doc.text, query, {limit: Math.min(3000 - total, 1000)})
+      const {matches, truncated: capped} = matchesFor(doc.text, {limit: Math.min(3000 - total, 1000)})
       truncated ||= capped
       if (!matches.length) continue
       const results = []
@@ -54,18 +64,22 @@ export async function searchWorkspace(root, query, {glob = '*', depth = 12, prev
       }
       files.push({path: file, name, fingerprint: doc.fingerprint, results})
       total += matches.length
-    } catch { counters.skipped++ }
+    } catch (error) {
+      if (query.mode === 'regex' && (error instanceof WebAssembly.RuntimeError || /Boost regex/.test(error.message))) throw error
+      counters.skipped++
+    }
   }
   return {files, total, skipped: counters.skipped, truncated: truncated || counters.entries > 20000}
 }
 
 export async function applyWorkspace(plan, query, selected) {
+  const matchesFor = await matcher(query)
   const allowed = new Set(selected)
   const prepared = []
   for (const file of plan.files.filter(item => allowed.has(item.path))) {
     const doc = await readDocument(file.path)
     if (file.fingerprint !== doc.fingerprint) throw new Error(`${file.name} changed since preview. Run Preview Replace again.`)
-    const {matches, truncated} = findMatches(doc.text, query, {limit: 1000})
+    const {matches, truncated} = matchesFor(doc.text, {limit: 1000})
     if (truncated || doc.lossy || doc.binary) throw new Error(`Cannot safely replace in ${file.name}.`)
     const next = {...doc, text: replaceMatches(doc.text, matches), mixed: updateMixed(doc.text, doc.mixed, matches, doc.eol)}
     prepared.push({file, next})
