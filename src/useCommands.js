@@ -175,6 +175,7 @@ export function useCommands(ctx) {
     importNotepadSession: () => pickImport('notepad-session'),
     importNotepadPreferences: () => pickImport('notepad-preferences'),
     importNotepadShortcuts: () => pickImport('notepad-shortcuts'),
+    importNotepadProject: () => pickImport('notepad-project'), projects: () => toggleView('projects'),
     copy: () => copy(), cut: () => copy(true), paste,
     clipHistory: () => pick('Clipboard History', clip.current.map((value, id) => ({id, label: value.slice(0, 120), value})), item => insertAtSelections(m.selectedView(), () => item.value)),
     duplicate: () => alter(view => view.state.selection.ranges.every(range => range.empty) ? copyLineDown(view) : view.dispatch(view.state.changeByRange(range => {

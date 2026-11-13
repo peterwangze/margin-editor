@@ -14,7 +14,7 @@ Margin 0.9.1 opens to a document-first editor with a grouped toolbar, full-width
 - Regular expression search and replace uses the bundled Boost.Regex 1.90 engine. It supports patterns such as `\K` and named-group replacements such as `$+{name}`.
 - Inspect encoding and line endings from the status bar. Compare external changes and keep optional backups on save.
 - Use the command palette for bookmarks, column editing, macros, JSON formatting, Markdown preview, and text conversions.
-- Import Notepad++ XML sessions, common preferences, supported menu shortcuts, and UDLs with keyword colors, comments, operators, delimiters and folds.
+- Import Notepad++ XML sessions and project trees, common preferences, supported menu shortcuts, and UDLs with keyword colors, comments, operators, delimiters and folds.
 - Edit large files a page at a time in supported encodings. Find text across pages in Normal or Extended mode, jump to a match, and save the page without altering the other bytes.
 
 Choose the package for your processor. Windows packages are NSIS setup and portable EXE, macOS packages are DMG and ZIP, and Linux packages are AppImage and DEB. `SHA256SUMS.txt` covers every binary. The packages carry the runtime and local assets. Linux requires the host's desktop libraries. Windows builds lack a publisher signature, and macOS builds are ad hoc signed without notarization.

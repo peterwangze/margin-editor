@@ -78,6 +78,18 @@ export function Outline({doc, symbols, navigate, hide}) {
   return <aside className="sidebar" aria-label="Outline"><div className="panel-heading"><strong>Outline</strong><IconButton icon={PanelLeft} label="Hide Outline" onClick={hide} /></div><div className="panel-scroll"><div className="section-caption">{doc.name}</div>{symbols.map(item => <button className="side-row" key={`${item.line}:${item.name}`} onClick={() => navigate(item.line)}><FileText size={14} /><span>{item.name}</span><small>{item.line}</small></button>)}{!symbols.length && <p className="panel-empty">No symbols found.</p>}</div></aside>
 }
 
+function ProjectEntries({entries, open}) {
+  return entries.map((entry, index) => entry.children
+    ? <details key={index} open><summary>{entry.name}</summary><div className="tree-children"><ProjectEntries entries={entry.children} open={open} /></div></details>
+    : <button key={index} type="button" className="side-row" title={entry.path} onClick={() => open(entry.path)}><FileGlyph name={entry.name} /><span>{entry.name}</span></button>)
+}
+
+export function Projects({workspaces, hide, importProject, open}) {
+  return <aside className="sidebar" aria-label="Project panel"><div className="panel-heading"><strong>Projects</strong><IconButton icon={PanelLeft} label="Hide project panel" onClick={hide} /></div>
+    <div className="panel-scroll"><button className="side-row quiet" onClick={importProject}>Open Notepad++ project…</button>{workspaces.map(workspace => <details key={workspace.source} open><summary title={workspace.source}>{workspace.name}</summary><ProjectEntries entries={workspace.projects} open={path => open(workspace, path)} /></details>)}</div>
+  </aside>
+}
+
 export function LargeSearch({api, doc, close, jump, initialQuery}) {
   const [query, setQuery] = useState(() => ({...emptyQuery, needle: initialQuery.needle, mode: initialQuery.mode === 'extended' ? 'extended' : 'literal', whole: initialQuery.whole, caseSensitive: initialQuery.caseSensitive}))
   const [result, setResult] = useState(null)

@@ -138,6 +138,30 @@ test('I07 imports a Notepad++ session with two views, byte selections, bookmarks
   assert.equal(await fs.readFile(path.join(temp, 'backup.txt'), 'utf8'), 'unsaved words\n')
 })
 
+test('I07 opens a file through an imported Notepad++ project with virtual folders', {timeout: 45000}, async t => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-project-'))
+  const profile = path.join(temp, 'profile')
+  await fs.mkdir(profile)
+  await fs.mkdir(path.join(temp, 'actual'))
+  await fs.writeFile(path.join(temp, 'actual', 'memo.txt'), 'document in a different folder')
+  const workspace = path.join(temp, 'project.xml')
+  await fs.writeFile(workspace, '<NotepadPlus><Project name="Team"><Folder name="Virtual"><File name="actual\\memo.txt"/></Folder></Project></NotepadPlus>')
+  const {app, page} = await launch(profile)
+  t.after(async () => {
+    await app.close().catch(() => {})
+    await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  await page.getByRole('button', {name: 'View', exact: true}).click()
+  const chooser = page.waitForEvent('filechooser')
+  await page.getByRole('button', {name: 'Open Notepad++ project…', exact: true}).click()
+  await (await chooser).setFiles(workspace)
+  const panel = page.getByRole('complementary', {name: 'Project panel'})
+  await expect(panel.getByText('Virtual', {exact: true})).toBeVisible()
+  await panel.getByRole('button', {name: 'memo.txt', exact: true}).click()
+  await expect(page.getByRole('tab', {name: 'memo.txt', exact: true})).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('.cm-line').first()).toHaveText('document in a different folder')
+})
+
 test('I04 opens a large-file search result on another page and saves edits to that page', {timeout: 45000}, async t => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-large-ui-'))
   const profile = path.join(temp, 'profile')

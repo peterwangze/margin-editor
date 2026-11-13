@@ -3,7 +3,7 @@ import {useDeferredValue, useEffect, useRef, useState} from 'react'
 import {X, AlertTriangle, ChevronDown} from 'lucide-react'
 import {languages} from '@codemirror/language-data'
 import {Chrome, Explorer, Tabs, FindBar, Output, FileGlyph, IconButton} from './chrome'
-import {Dialog, Palette, Fields, Settings, WorkspaceSearch, Outline, LargeSearch} from './panels'
+import {Dialog, Palette, Fields, Settings, WorkspaceSearch, Outline, LargeSearch, Projects} from './panels'
 import {Companion, DocumentMap} from './Companion'
 import {EditorSurface, goTo, isOverwrite, modeFor, syncEditor} from './editor'
 import {useDocuments} from './useDocuments'
@@ -14,6 +14,7 @@ import {definitions, eventShortcut, menus} from './commands'
 import {readNotepadPreferences, readNotepadSession} from './notepad-session'
 import {readNotepadShortcuts} from './notepad-shortcuts'
 import {readNotepadLanguages} from './notepad-udl'
+import {readNotepadProject} from './notepad-project'
 import {version} from '../package.json'
 import '@fontsource/instrument-sans/latin-400.css'
 import '@fontsource/instrument-sans/latin-600.css'
@@ -75,6 +76,14 @@ function App() {
   async function importFile(file) {
     if (!file) return
     const text = await file.text()
+    if (importType.current === 'notepad-project') {
+      if (!api) throw new Error('Open the desktop app to load a Notepad++ project.')
+      const [source] = api.pathsFor([file])
+      const projects = readNotepadProject(text)
+      m.setSettings(current => ({...current, projects: [...current.projects.filter(item => item.source !== source), {source, name: file.name, projects}]}))
+      setPanel('projects')
+      return
+    }
     if (importType.current === 'notepad-shortcuts') {
       const result = readNotepadShortcuts(text, m.settings.shortcuts, definitions)
       m.setSettings(current => ({...current, shortcuts: result.settings}))
@@ -259,6 +268,16 @@ function App() {
     <main className="workspace">
       {panel === 'files' && <Explorer docs={m.docs} active={m.doc.id} workspace={m.workspace} entries={m.entries} api={api} openPath={path => safe(() => m.openPath(path))} focusDoc={m.focus} chooseFolder={() => invoke('openFolder')} notify={notify} hide={() => setPanel('')} />}
       {panel === 'outline' && <Outline doc={deferredDoc} symbols={symbolsFor(deferredDoc, m.settings.languages.find(item => item.name === deferredDoc.language)?.outline)} navigate={line => goTo(m.selectedView(), line)} hide={() => setPanel('')} />}
+      {panel === 'projects' && <Projects workspaces={m.settings.projects} hide={() => setPanel('')} importProject={() => invoke('importNotepadProject')} open={(workspace, source) => safe(async () => {
+        let path = await api.resolveSessionPath(workspace.source, source)
+        if (!path && api.platform !== 'win32' && /^[A-Z]:[\\/]/i.test(source)) {
+          const folder = await api.pickFolder()
+          if (!folder) return
+          path = await api.resolveSessionPath(workspace.source, source, folder)
+        }
+        if (!path) throw new Error('Open this path directly to access the document.')
+        await m.openPath(path)
+      })} />}
       {panel === 'search' && <WorkspaceSearch api={api} workspace={m.workspace} chooseFolder={() => invoke('openFolder')} openPath={(...args) => safe(() => m.openPath(...args))} docs={m.docs} notify={notify} reload={reloadFiles} hide={() => setPanel('')} />}
       <div className="central"><div className="editing-area"><div className={`panes ${m.split}`}>{viewPane('main', m.main)}{m.split && viewPane('secondary', m.secondary)}</div>{companion && <Companion mode={companion} doc={m.doc} close={() => setCompanion('')} />}</div>{output && <Output data={output} close={() => setOutput(null)} />}
         {find.show && <FindBar query={find.query} change={find.change} replace={find.show === 'replace'} result={find.result} index={find.index} next={find.next} apply={find.apply} close={find.close} mark={() => invoke('markMatches')} options={() => invoke('searchOptions')} input={find.input} />}</div>

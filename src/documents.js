@@ -1,6 +1,6 @@
 import {newlines} from '../shared/text.mjs'
 
-export const defaults = {theme: 'system', tabSize: 2, fontSize: 15, numbers: true, spaces: true, whitespace: false, wrap: false, backup: false, autocomplete: true, indentGuides: true, recover: true, shortcuts: {}, languages: [], tools: [], rtl: false, newEncoding: 'UTF-8', newEol: 'LF'}
+export const defaults = {theme: 'system', tabSize: 2, fontSize: 15, numbers: true, spaces: true, whitespace: false, wrap: false, backup: false, autocomplete: true, indentGuides: true, recover: true, shortcuts: {}, languages: [], tools: [], rtl: false, newEncoding: 'UTF-8', newEol: 'LF', projects: []}
 
 const samples = {
   'workspace.json': `{

@@ -4,7 +4,7 @@ export const menus = {
   File: ['new', 'open', 'openFolder', 'recent', 'quick', '—', 'save', 'saveAs', 'saveCopy', 'saveAll', 'reload', 'rename', 'reveal', 'trash', '—', 'close', 'closeOthers', 'closeAll', 'reopen', 'print', 'exportSession', 'importSession', 'importNotepadSession'],
   Edit: ['undo', 'redo', '—', 'cut', 'copy', 'paste', 'clipHistory', 'selectAll', 'selectNext', '—', 'column', 'duplicate', 'deleteLine', 'moveUp', 'moveDown', 'comment', 'blockComment', 'indent', 'outdent', 'overwrite', 'readOnly', '—', 'upper', 'lower', 'titleCase', 'invertCase', 'sort', 'sortDesc', 'sortNumeric', 'unique', 'removeEmpty', 'trim', 'trimLeading', 'join', 'reverse', 'tabsToSpaces', 'spacesToTabs', 'insertDate', 'characters'],
   Search: ['find', 'replace', 'next', 'previous', 'wholeFile', 'projectSearch', 'findOpen', 'searchOptions', 'goto', 'symbol', '—', 'bookmark', 'markMatches', 'nextBookmark', 'prevBookmark', 'copyBookmarks', 'removeBookmarks', 'clearBookmarks'],
-  View: ['explorer', 'outline', 'split', 'splitBelow', 'clone', 'syncScroll', 'minimap', 'wrap', 'whitespace', 'lineNumbers', 'foldAll', 'unfoldAll', 'preview', 'diff', 'tail', 'fullscreen', 'zoomIn', 'zoomOut', 'zoomReset'],
+  View: ['explorer', 'outline', 'projects', 'importNotepadProject', 'split', 'splitBelow', 'clone', 'syncScroll', 'minimap', 'wrap', 'whitespace', 'lineNumbers', 'foldAll', 'unfoldAll', 'preview', 'diff', 'tail', 'fullscreen', 'zoomIn', 'zoomOut', 'zoomReset'],
   Encoding: ['convert', 'reinterpret', '—', 'lf', 'crlf', 'cr'],
   Language: ['language', 'customLanguage', 'importUdl', '—', 'formatJson', 'compactJson'],
   Settings: ['settings', 'keybindings', 'theme', 'importNotepadPreferences', 'importNotepadShortcuts'],
@@ -30,6 +30,7 @@ export const definitions = {
   documents: ['Open documents…'], previousTab: ['Previous tab', 'Mod+PageUp'], nextTab: ['Next tab', 'Mod+PageDown'], samples: ['Open sample documents'], wholeFile: ['Find across all pages…'],
   importNotepadPreferences: ['Import Notepad++ preferences…'],
   importNotepadShortcuts: ['Import Notepad++ shortcuts…'],
+  projects: ['Toggle project panel'], importNotepadProject: ['Open Notepad++ project…'],
 }
 
 export function eventShortcut(event) {
