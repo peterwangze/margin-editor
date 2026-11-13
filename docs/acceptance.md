@@ -60,6 +60,19 @@ F01–F12 是早期迁移对照，保留子项和历史结果。当前产品承�
 
 安装包的 CI 通过表示已生成工件，带 Smoke 步骤的架构还验证了包内应用的真实编辑与磁盘操作。完整安装程序、系统文件关联和卸载用例需要独立证据。
 
+## v1.1.0 执行记录
+
+发行提交 `fc46f84f07a0365855bc481f50e46d6a299250f4`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43400802115) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43413432313) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.1.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.1.0/ACCEPTANCE.zip)
+
+| 范围 | 状态 | 已观察的结果 |
+| --- | --- | --- |
+| G01–G04 | 通过 | Windows、macOS、Linux 的 x64 与 ARM64 分别验证各自两种包格式，执行实际打开、编辑、查找替换、撤销及落盘字节检查。每组运行 11 项桌面回归。另通过 13 项核心及 11 项浏览器用例。 |
+| G06 系统语言 | 通过 | 六组原生架构环境读取实际系统语言，与应用首次启动的选择比对。模拟简体中文偏好后，从 12 个发行包分别验证默认中文、即时切换、设置焦点、草稿和撤销记录，以及恢复跟随系统。 |
+| G06 持久化和界面 | 通过 | 每个包重启后仍保留手动选择的英文，返回跟随系统后恢复中文。验收档案包含 12 份中文设置截图及 12 份中文查找截图。macOS 两种架构同时检查了原生菜单标签。 |
+| G05 | 通过 | 公开 Latest 为正式版，12 个离线包及两个验收文件均可直接下载。清单的 13 条 SHA-256 与 GitHub 资产摘要一致。 |
+
+标准文件对话框由操作系统提供。Windows 包无发布者签名，macOS 包未公证，Linux AppImage 以无 FUSE 的解包方式验收。Windows 和 macOS 测试阻断页面外网请求，Linux 包内测试使用只开放回环的网络命名空间。
+
 ## v1.0.0 执行记录
 
 发行提交 `d351b253a5e94081f5051ba83b00aa8e9a443e01`。三平台 x64 与 ARM64 均在原生架构的 GitHub Actions 环境执行。[六组验收日志](https://github.com/peterwangze/margin-editor/actions/runs/43345898222) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43346933617) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.0.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/ACCEPTANCE.zip)
