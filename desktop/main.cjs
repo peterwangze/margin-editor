@@ -33,7 +33,7 @@ const languagePath = () => path.join(app.getPath('userData'), 'ui-language.json'
 
 function systemLanguages() {
   const testLocale = process.env.MARGIN_TEST_LOCALE
-  if (testLocale && process.env.MARGIN_PROFILE && process.argv.some(arg => /^--remote-debugging-port=\d+$/.test(arg))) return [testLocale]
+  if (testLocale && process.env.MARGIN_PROFILE && /^\d+$/.test(app.commandLine.getSwitchValue('remote-debugging-port'))) return [testLocale]
   const preferred = app.getPreferredSystemLanguages()
   return preferred.length ? preferred : [app.getLocale()]
 }
