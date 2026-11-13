@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react'
+import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 import {EditorView} from '@codemirror/view'
 import {emptyQuery} from '../shared/text.mjs'
 import {useLocale} from './i18n'
@@ -13,9 +13,18 @@ export function useFind(doc, selectedView, notify) {
   const [index, setIndex] = useState(-1)
   const [range, setRange] = useState(null)
   const input = useRef(null)
+  const focusOnOpen = useRef(false)
   const activeMatch = useRef(null)
   const current = useRef({})
   current.current = {selectedView, doc}
+
+  useLayoutEffect(() => {
+    if (show && focusOnOpen.current) {
+      focusOnOpen.current = false
+      input.current?.focus()
+      input.current?.select()
+    }
+  }, [show])
 
   useEffect(() => {
     if (!show || !query.needle) { setResult(empty); setIndex(-1); return }
@@ -59,8 +68,13 @@ export function useFind(doc, selectedView, notify) {
       const text = view.state.sliceDoc(selection.from, selection.to)
       if (!text.includes('\n')) setQuery({...query, needle: text, mode: 'literal', inSelection: false})
     }
-    setShow(mode)
-    requestAnimationFrame(() => { input.current?.focus(); input.current?.select() })
+    if (mode === show && input.current) {
+      input.current.focus()
+      input.current.select()
+    } else {
+      focusOnOpen.current = true
+      setShow(mode)
+    }
   }
   const close = () => { setShow(''); selectedView()?.focus() }
   const next = step => {
