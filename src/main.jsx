@@ -2,15 +2,19 @@ import {createRoot} from 'react-dom/client'
 import {useDeferredValue, useEffect, useRef, useState} from 'react'
 import {X, AlertTriangle, ChevronDown} from 'lucide-react'
 import {languages} from '@codemirror/language-data'
-import {Chrome, Activity, Explorer, Tabs, FindBar, Output, FileGlyph, IconButton} from './chrome'
-import {Dialog, Palette, Fields, Settings, WorkspaceSearch, Outline} from './panels'
+import {Chrome, Explorer, Tabs, FindBar, Output, FileGlyph, IconButton} from './chrome'
+import {Dialog, Palette, Fields, Settings, WorkspaceSearch, Outline, LargeSearch} from './panels'
 import {Companion, DocumentMap} from './Companion'
 import {EditorSurface, goTo, isOverwrite, modeFor, syncEditor} from './editor'
 import {useDocuments} from './useDocuments'
 import {useFind} from './useFind'
 import {useCommands} from './useCommands'
 import {documentFor, symbolsFor} from './documents'
-import {eventShortcut, menus} from './commands'
+import {definitions, eventShortcut, menus} from './commands'
+import {readNotepadPreferences, readNotepadSession} from './notepad-session'
+import {readNotepadShortcuts} from './notepad-shortcuts'
+import {readNotepadLanguages} from './notepad-udl'
+import {version} from '../package.json'
 import '@fontsource/instrument-sans/latin-400.css'
 import '@fontsource/instrument-sans/latin-600.css'
 import '@fontsource/ibm-plex-mono/latin-400.css'
@@ -35,7 +39,7 @@ function App() {
   const notify = message => { setNotice(String(message)); clearTimeout(noticeTimer.current); noticeTimer.current = setTimeout(() => setNotice(null), 4300) }
   const m = useDocuments(api, notify)
   const find = useFind(m.doc, m.selectedView, notify)
-  const [panel, setPanel] = useState('files')
+  const [panel, setPanel] = useState('')
   const [dialog, setDialog] = useState(null)
   const [context, setContext] = useState(null)
   const [output, setOutput] = useState(null)
@@ -71,6 +75,43 @@ function App() {
   async function importFile(file) {
     if (!file) return
     const text = await file.text()
+    if (importType.current === 'notepad-shortcuts') {
+      const result = readNotepadShortcuts(text, m.settings.shortcuts, definitions)
+      m.setSettings(current => ({...current, shortcuts: result.settings}))
+      notify(`Imported ${result.count} shortcut${result.count === 1 ? '' : 's'} from Notepad++.`)
+      if (result.skipped.length) setOutput({title: 'Notepad++ shortcuts import', text: ['Skipped entries:', ...result.skipped].join('\n')})
+      return
+    }
+    if (importType.current === 'notepad-preferences') {
+      const settings = readNotepadPreferences(text)
+      m.setSettings(current => ({...current, ...settings}))
+      notify(`Imported ${Object.keys(settings).length} preferences from Notepad++.`)
+      return
+    }
+    if (importType.current === 'notepad-session') {
+      if (!api) throw new Error('Open the desktop app to import a Notepad++ session.')
+      const [path] = api.pathsFor([file])
+      const session = readNotepadSession(text)
+      const windowsPaths = session.views.some(view => view.files.some(item => /^[A-Z]:[\\/]/i.test(item.filename)))
+      let remap = null
+      if (api.platform !== 'win32' && windowsPaths) {
+        const choice = await m.confirm('Map Windows drive paths?', 'Choose the local directory that contains the copied drive contents.', ['Choose Folder', 'Skip Windows Paths', 'Cancel'])
+        if (choice === 2) return
+        if (choice === 0) { remap = await api.pickFolder(); if (!remap) return }
+      }
+      const findLanguage = name => {
+        const aliases = {'normal text': 'Plain Text', 'text': 'Plain Text'}
+        const key = name?.toLowerCase()
+        return aliases[key] ?? [...languageNames, ...m.settings.languages.map(item => item.name)].find(value => value.toLowerCase() === key)
+      }
+      const result = await m.importNotepadSession(session, path, remap, findLanguage)
+      notify(`Imported ${result.count} document${result.count === 1 ? '' : 's'}.`)
+      if (result.skipped.length || result.recovered.length) setOutput({title: 'Notepad++ session import', text: [
+        ...(result.recovered.length ? ['Recovered as unsaved tabs:', ...result.recovered] : []),
+        ...(result.skipped.length ? ['Could not open:', ...result.skipped] : []),
+      ].join('\n')})
+      return
+    }
     if (importType.current === 'session') {
       const data = JSON.parse(text)
       if (data.version !== 1 || !Array.isArray(data.docs)) throw new Error('This is not a Margin session file.')
@@ -80,14 +121,9 @@ function App() {
       notify(`Imported ${docs.length} documents.`)
       return
     }
-    const xml = new DOMParser().parseFromString(text, 'application/xml')
-    if (xml.querySelector('parsererror')) throw new Error('The UDL file is not valid XML.')
-    const modes = [...xml.querySelectorAll('UserLang')].map(node => ({name: node.getAttribute('name'), extensions: node.getAttribute('ext') ?? '',
-      keywords: [...node.querySelectorAll('Keywords')].filter(item => /^Keywords[1-8]$/.test(item.getAttribute('name'))).map(item => item.textContent).join(' '),
-      comment: node.querySelector('Keywords[name="Comments"]')?.textContent.match(/(?:^|\s)00(\S+)/)?.[1] ?? ''})).filter(item => item.name)
-    if (!modes.length) throw new Error('No Notepad++ UserLang entries were found.')
+    const modes = readNotepadLanguages(text)
     changeSettings({languages: [...m.settings.languages.filter(item => !modes.some(mode => mode.name === item.name)), ...modes]})
-    notify(`Imported ${modes.length} language definitions.`)
+    notify(`Imported ${modes.length} language definition${modes.length === 1 ? '' : 's'}.`)
   }
 
   const openDocumentsSearch = () => setDialog({kind: 'open-search'})
@@ -205,9 +241,8 @@ function App() {
     const active = m.slot === slot
     return <section className={`editor-pane ${active ? 'active-pane' : ''}`} aria-label={`${slot === 'main' ? 'Primary' : 'Secondary'} editor`}>
       <Tabs docs={m.docs} active={doc.id} focus={id => m.focus(id, slot)} close={id => safe(() => m.close([id]))} add={() => invoke('new')} reorder={m.reorder} context={(doc, x, y) => setContext({doc, x, y})} pane={slot} />
-      {active && find.show && <FindBar query={find.query} change={find.change} replace={find.show === 'replace'} result={find.result} index={find.index} next={find.next} apply={find.apply} close={find.close} mark={() => invoke('markMatches')} options={() => invoke('searchOptions')} input={find.input} />}
       {active && doc.external && <div className="conflict" role="alert"><AlertTriangle size={15} /><span>{doc.external.missing ? 'File moved or removed on disk.' : 'File changed on disk.'}</span>{!doc.external.error && <>{!doc.large && <button className="outline-button" onClick={() => safe(compareDisk)}>Compare</button>}<button className="outline-button" onClick={() => invoke('reload')}>Reload</button></>}{!doc.large && <button className="outline-button" onClick={() => invoke('saveAs')}>Save As…</button>}</div>}
-      {doc.large && <div className="page-bar"><span>Read-only · {doc.large.offset.toLocaleString()}–{doc.large.end.toLocaleString()} / {doc.size.toLocaleString()} bytes</span><button className="outline-button" disabled={doc.large.index === 0} onClick={() => safe(() => m.readPage(doc, doc.large.index - 1))}>Previous page</button><button className="outline-button" onClick={() => setDialog({kind: 'fields', label: 'Go to file page', fields: [{name: 'page', label: `Page (1–${doc.large.pages})`, value: doc.large.index + 1, type: 'number', min: 1, max: doc.large.pages}], submit: ({page}) => m.readPage(doc, Number(page) - 1)})}>{doc.large.index + 1} / {doc.large.pages}</button><button className="outline-button" disabled={doc.large.index >= doc.large.pages - 1} onClick={() => safe(() => m.readPage(doc, doc.large.index + 1))}>Next page</button></div>}
+      {doc.large && <div className="page-bar"><span>{doc.readOnly ? 'Read-only' : doc.dirty ? 'Save this page to navigate' : 'Page editing'} · {doc.large.offset.toLocaleString()}–{doc.large.end.toLocaleString()} / {doc.size.toLocaleString()} bytes</span><button className="outline-button" disabled={doc.dirty || doc.large.index === 0} onClick={() => safe(() => m.readPage(doc, doc.large.index - 1))}>Previous page</button><button className="outline-button" disabled={doc.dirty} onClick={() => setDialog({kind: 'fields', label: 'Go to file page', fields: [{name: 'page', label: `Page (1–${doc.large.pages})`, value: doc.large.index + 1, type: 'number', min: 1, max: doc.large.pages}], submit: ({page}) => m.readPage(doc, Number(page) - 1)})}>{doc.large.index + 1} / {doc.large.pages}</button><button className="outline-button" disabled={doc.dirty || doc.large.index >= doc.large.pages - 1} onClick={() => safe(() => m.readPage(doc, doc.large.index + 1))}>Next page</button>{active && <button className="outline-button" disabled={commands.wholeFile.disabled} onClick={() => invoke('wholeFile')}>Find Across Pages…</button>}</div>}
       <div className="editor-body"><EditorSurface doc={doc} settings={m.settings} slot={slot} attach={m.attach} onEdit={onEdit} onCursor={onCursor} activate={m.setSlot} onScroll={onScroll} matches={active && find.show ? find.result.matches : noMatches} matchIndex={active ? find.index : -1} />
         {minimap && active && <DocumentMap text={doc.text} navigate={line => goTo(m.selectedView(), line)} />}</div>
     </section>
@@ -220,16 +255,16 @@ function App() {
   return <div className="workbench" style={{'--editor-size': `${m.settings.fontSize}px`}} onDragOver={event => {
     if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDrag(true) }
   }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDrag(false) }} onDrop={onDropFiles}>
-    <Chrome menus={menus} commands={commands} invoke={invoke} palette={() => invoke('palette')} platform={api?.platform} />
+    <Chrome menus={menus} commands={commands} invoke={invoke} platform={api?.platform} doc={m.doc} toggled={{wrap: m.settings.wrap, whitespace: m.settings.whitespace, split: Boolean(m.split)}} />
     <main className="workspace">
-      <Activity panel={panel} onPanel={name => setPanel(current => current === name ? '' : name)} split={() => invoke('split')} settings={() => invoke('settings')} />
       {panel === 'files' && <Explorer docs={m.docs} active={m.doc.id} workspace={m.workspace} entries={m.entries} api={api} openPath={path => safe(() => m.openPath(path))} focusDoc={m.focus} chooseFolder={() => invoke('openFolder')} notify={notify} hide={() => setPanel('')} />}
       {panel === 'outline' && <Outline doc={deferredDoc} symbols={symbolsFor(deferredDoc, m.settings.languages.find(item => item.name === deferredDoc.language)?.outline)} navigate={line => goTo(m.selectedView(), line)} hide={() => setPanel('')} />}
       {panel === 'search' && <WorkspaceSearch api={api} workspace={m.workspace} chooseFolder={() => invoke('openFolder')} openPath={(...args) => safe(() => m.openPath(...args))} docs={m.docs} notify={notify} reload={reloadFiles} hide={() => setPanel('')} />}
-      <div className="central"><div className="editing-area"><div className={`panes ${m.split}`}>{viewPane('main', m.main)}{m.split && viewPane('secondary', m.secondary)}</div>{companion && <Companion mode={companion} doc={m.doc} close={() => setCompanion('')} />}</div>{output && <Output data={output} close={() => setOutput(null)} />}</div>
+      <div className="central"><div className="editing-area"><div className={`panes ${m.split}`}>{viewPane('main', m.main)}{m.split && viewPane('secondary', m.secondary)}</div>{companion && <Companion mode={companion} doc={m.doc} close={() => setCompanion('')} />}</div>{output && <Output data={output} close={() => setOutput(null)} />}
+        {find.show && <FindBar query={find.query} change={find.change} replace={find.show === 'replace'} result={find.result} index={find.index} next={find.next} apply={find.apply} close={find.close} mark={() => invoke('markMatches')} options={() => invoke('searchOptions')} input={find.input} />}</div>
     </main>
     <footer className="status-bar" aria-label="Document status"><div className="status-file" title={m.doc.path ?? m.doc.name}><FileGlyph name={m.doc.name} size={14} /><span>{m.doc.name}</span><span className={m.doc.dirty ? 'unsaved-text' : ''}>{m.doc.dirty ? 'Unsaved' : m.doc.readOnly ? 'Read-only' : m.doc.sample ? 'Demo' : m.doc.path ? 'Saved' : 'New'}</span>{recording && <span className="unsaved-text">● Recording</span>}{tail === m.doc.id && <span>Following</span>}</div><div className="status-controls">
-      <button onClick={() => invoke('goto')} title="Go to line">Ln {status.line}, Col {status.col}{status.count ? ` (${status.count} selected)` : ''}</button><button onClick={() => invoke('overwrite')} title="Toggle overwrite">{status.overwrite ? 'OVR' : 'INS'}</button><button onClick={() => invoke('convert')} title="Convert encoding">{m.doc.encoding}</button><button onClick={() => setDialog({kind: 'palette', label: 'Line Endings', items: ['LF', 'CRLF', 'CR'].map(label => ({id: label, label})), run: item => invoke(item.id.toLowerCase())})} title="Line endings">{m.doc.mixed ? `Mixed (${m.doc.eol})` : m.doc.eol}</button><button onClick={() => invoke('language')} title="Select language">{mode?.name ?? 'Plain Text'}</button><button onClick={() => invoke('settings')} title="Indentation">{m.settings.spaces ? 'Spaces' : 'Tabs'}: {m.settings.tabSize}</button><button onClick={() => invoke('zoomReset')} title="Reset editor zoom">{Math.round(m.settings.fontSize / 15 * 100)}%</button>
+      <span className="status-metric" title="Document length in UTF-16 code units">Length: {m.doc.text.length.toLocaleString()}</span><span className="status-metric">Lines: {status.lines.toLocaleString()}</span><button onClick={() => invoke('goto')} title="Go to line">Ln {status.line}, Col {status.col}{status.count ? ` (${status.count} selected)` : ''}</button><button onClick={() => setDialog({kind: 'palette', label: 'Line Endings', items: ['LF', 'CRLF', 'CR'].map(label => ({id: label, label})), run: item => invoke(item.id.toLowerCase())})} title="Line endings">{m.doc.mixed ? `Mixed (${m.doc.eol})` : m.doc.eol}</button><button onClick={() => invoke('convert')} title="Convert encoding">{m.doc.encoding}</button><button onClick={() => invoke('language')} title="Select language">{mode?.name ?? 'Plain Text'}</button><button onClick={() => invoke('settings')} title="Indentation">{m.settings.spaces ? 'Spaces' : 'Tabs'}: {m.settings.tabSize}</button><button onClick={() => invoke('zoomReset')} title="Reset editor zoom">{Math.round(m.settings.fontSize / 15 * 100)}%</button><button onClick={() => invoke('overwrite')} title="Toggle overwrite">{status.overwrite ? 'OVR' : 'INS'}</button>
     </div></footer>
     <input type="file" multiple ref={m.fileInput} hidden onChange={event => { const files = [...event.target.files]; event.target.value = ''; safe(() => m.openBrowser(files)) }} />
     <input type="file" ref={importInput} hidden onChange={event => { const file = event.target.files[0]; event.target.value = ''; safe(() => importFile(file)) }} />
@@ -242,8 +277,9 @@ function App() {
     {dialog?.kind === 'palette' && <Palette key={dialog.label} mode={dialog.label} items={dialog.items} close={closeDialog} run={item => safe(() => dialog.run(item))} />}
     {dialog?.kind === 'fields' && <Fields key={dialog.label} {...dialog} close={closeDialog} />}
     {dialog?.kind === 'settings' && <Settings settings={m.settings} change={changeSettings} close={closeDialog} keybindings={() => invoke('keybindings')} customLanguage={() => invoke('customLanguage')} tools={() => invoke('tools')} />}
-    {dialog?.kind === 'about' && <Dialog label="About Margin" close={closeDialog}><div className="form"><p>Margin is a desktop workbench for plain text and code.</p><p>Version 0.9.0 · MIT</p><button className="outline-button" onClick={() => invoke('repository')}>Source and releases</button></div></Dialog>}
+    {dialog?.kind === 'about' && <Dialog label="About Margin" close={closeDialog}><div className="form"><p>Margin is a desktop editor for plain text and code.</p><p>Version {version} · MIT</p><button className="outline-button" onClick={() => invoke('repository')}>Source and releases</button></div></Dialog>}
     {dialog?.kind === 'open-search' && <OpenSearch docs={m.docs} focus={m.focus} close={closeDialog} />}
+    {dialog?.kind === 'large-search' && <LargeSearch api={api} doc={m.doc} close={closeDialog} initialQuery={find.query} jump={match => safe(async () => { await m.readPage(m.doc, match.page, match); m.selectedView()?.focus() })} />}
   </div>
 
   function palette() { setDialog({kind: 'palette', label: 'Command Palette', items: paletteItems, run: item => invoke(item.id)}) }

@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import {Search, X, PanelLeft, FileText, Check} from 'lucide-react'
 import {IconButton, FileGlyph, shortcutLabel} from './chrome'
 import {basename} from './documents'
-import {emptyQuery} from '../shared/text.mjs'
+import {emptyQuery, encodings} from '../shared/text.mjs'
 
 export function Dialog({label, children, close, className = ''}) {
   const ref = useRef(null)
@@ -66,7 +66,8 @@ export function Settings({settings, change, close, keybindings, customLanguage, 
   const checks = {numbers: 'Line numbers', wrap: 'Word wrap', spaces: 'Insert spaces', whitespace: 'Show whitespace', autocomplete: 'Autocomplete', backup: 'Keep backup on save', recover: 'Restore session on launch', rtl: 'Right-to-left text'}
   return <Dialog label="Settings" close={close}>
     <div className="form settings-form"><label>Appearance<select data-focus value={settings.theme} onChange={event => change({theme: event.target.value})}><option value="dark">Ink</option><option value="light">Paper</option><option value="system">System</option></select></label>
-      <div className="form-columns"><label>Editor font size<input type="number" min="10" max="36" value={settings.fontSize} onChange={event => change({fontSize: Math.min(36, Math.max(10, Number(event.target.value)))})} /></label><label>Tab width<select value={settings.tabSize} onChange={event => change({tabSize: Number(event.target.value)})}>{[1, 2, 3, 4, 6, 8].map(n => <option key={n}>{n}</option>)}</select></label></div>
+      <div className="form-columns"><label>Editor font size<input type="number" min="10" max="36" value={settings.fontSize} onChange={event => change({fontSize: Math.min(36, Math.max(10, Number(event.target.value)))})} /></label><label>Tab width<select value={settings.tabSize} onChange={event => change({tabSize: Number(event.target.value)})}>{Array.from({length: 32}, (_, i) => <option key={i + 1}>{i + 1}</option>)}</select></label></div>
+      <div className="form-columns"><label>New document encoding<select value={settings.newEncoding} onChange={event => change({newEncoding: event.target.value})}>{[...new Set([...encodings, settings.newEncoding])].map(value => <option key={value}>{value}</option>)}</select></label><label>New document line endings<select value={settings.newEol} onChange={event => change({newEol: event.target.value})}>{['LF', 'CRLF', 'CR'].map(value => <option key={value}>{value}</option>)}</select></label></div>
       <div className="settings-checks">{Object.entries(checks).map(([name, label]) => <label className="checkbox" key={name}><span>{label}</span><input type="checkbox" checked={settings[name]} onChange={event => change({[name]: event.target.checked})} /></label>)}</div>
       <div className="settings-links"><button className="outline-button" onClick={keybindings}>Keyboard shortcuts</button><button className="outline-button" onClick={customLanguage}>Custom languages</button><button className="outline-button" onClick={tools}>Saved tools</button></div>
     </div>
@@ -75,6 +76,35 @@ export function Settings({settings, change, close, keybindings, customLanguage, 
 
 export function Outline({doc, symbols, navigate, hide}) {
   return <aside className="sidebar" aria-label="Outline"><div className="panel-heading"><strong>Outline</strong><IconButton icon={PanelLeft} label="Hide Outline" onClick={hide} /></div><div className="panel-scroll"><div className="section-caption">{doc.name}</div>{symbols.map(item => <button className="side-row" key={`${item.line}:${item.name}`} onClick={() => navigate(item.line)}><FileText size={14} /><span>{item.name}</span><small>{item.line}</small></button>)}{!symbols.length && <p className="panel-empty">No symbols found.</p>}</div></aside>
+}
+
+export function LargeSearch({api, doc, close, jump, initialQuery}) {
+  const [query, setQuery] = useState(() => ({...emptyQuery, needle: initialQuery.needle, mode: initialQuery.mode === 'extended' ? 'extended' : 'literal', whole: initialQuery.whole, caseSensitive: initialQuery.caseSensitive}))
+  const [result, setResult] = useState(null)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => () => { api.cancelLargeSearch().catch(() => {}) }, [api])
+  const change = value => { setQuery({...query, ...value}); setResult(null); setError('') }
+  const submit = async event => {
+    event.preventDefault()
+    if (pending || !query.needle) return
+    setPending(true); setError(''); setResult(null)
+    try { setResult(await api.largeSearch(doc.path, doc.encoding, doc.fingerprint, query)) }
+    catch (error) { setError(error.message) }
+    finally { setPending(false) }
+  }
+  return <Dialog label="Find Across All Pages" close={close}>
+    <form className="form" onSubmit={submit}>
+      <label>Find<input data-focus value={query.needle} disabled={pending} onChange={event => change({needle: event.target.value})} /></label>
+      <div className="form-columns"><label>Mode<select value={query.mode} disabled={pending} onChange={event => change({mode: event.target.value})}><option value="literal">Normal</option><option value="extended">Extended</option></select></label><div>
+        <label className="checkbox">Match case<input type="checkbox" checked={query.caseSensitive} disabled={pending} onChange={event => change({caseSensitive: event.target.checked})} /></label>
+        <label className="checkbox">Whole word<input type="checkbox" checked={query.whole} disabled={pending} onChange={event => change({whole: event.target.checked})} /></label>
+      </div></div>
+      <div className="form-actions"><button className="primary-button" type="submit" disabled={pending || !query.needle}>{pending ? 'Searching…' : 'Find All'}</button></div>
+      {error && <p className="inline-error" role="alert">{error}</p>}
+      {result && <><p className="section-caption" role="status">{result.matches.length}{result.truncated ? '+' : ''} matches</p><div className="palette-results">{result.matches.map((match, index) => <button type="button" key={index} onClick={() => { close(); jump(match) }}><span><strong>Page {match.page + 1}{match.crossesPage ? ' · spans pages' : ''}</strong><small>{match.preview}</small></span></button>)}</div></>}
+    </form>
+  </Dialog>
 }
 
 export function WorkspaceSearch({workspace, chooseFolder, api, openPath, docs, notify, reload, hide}) {

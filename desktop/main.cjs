@@ -13,6 +13,7 @@ const page = 'margin://local/index.html'
 protocol.registerSchemesAsPrivileged([{scheme: 'margin', privileges: {standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, codeCache: true}}])
 let window
 let searchJob
+let largeSearchJob
 let applying = false
 let plan
 let queued = []
@@ -99,7 +100,7 @@ async function createWindow() {
     event.preventDefault()
     if (!closing) { closing = true; window.webContents.send('margin:beforeClose') }
   })
-  window.on('closed', () => { hasRenderer = false; window = null; searchJob?.cancel() })
+  window.on('closed', () => { hasRenderer = false; window = null; searchJob?.cancel(); largeSearchJob?.cancel() })
   await window.loadURL(page)
 }
 
@@ -113,9 +114,24 @@ const actions = {
     return stat.size > f.EDIT_LIMIT ? f.readLargePage(file, encoding) : f.readDocument(file, encoding)
   },
   async largePage(file, encoding, index) { return (await files).readLargePage(file, encoding, index) },
+  async largeSearch(file, encoding, expected, query) {
+    largeSearchJob?.cancel()
+    const job = worker('largeSearch', [file, encoding, expected, query], 60000)
+    largeSearchJob = job
+    try { return await job.promise }
+    finally { if (largeSearchJob === job) largeSearchJob = null }
+  },
+  cancelLargeSearch() { largeSearchJob?.cancel() },
+  resolveSessionPath(session, source, remap) {
+    if (!source || /^[\\/]{2}|^[a-z][a-z\d+.-]*:\/\//i.test(source)) return null
+    if (remap && /^[A-Z]:[\\/]/i.test(source)) return path.resolve(remap, source.slice(3).replaceAll('\\', '/'))
+    if (process.platform !== 'win32' && /^[A-Z]:/i.test(source)) return null
+    return path.resolve(path.dirname(session), source.replaceAll('\\', '/'))
+  },
   async saveDialog(defaultPath) { return (await dialog.showSaveDialog(window, {defaultPath, title: 'Save document'})).filePath ?? null },
   async save(filename, document, expected, backup) {
     const f = await files
+    if (document.large) return f.saveLargePage(filename, document, expected, {backup})
     if (expected === 'confirmed-dialog') {
       const existing = await f.existing(filename)
       expected = existing ? f.fingerprint((await f.readBytes(existing)).bytes) : null
@@ -202,7 +218,7 @@ const actions = {
     const {response} = await dialog.showMessageBox(window, {type: 'warning', message, detail, buttons, defaultId: 0, cancelId: buttons.length - 1, noLink: true})
     return response
   },
-  titleStyle(light) { if (process.platform !== 'darwin') window.setTitleBarOverlay({color: light ? '#f6f4fa' : '#191721', symbolColor: light ? '#2a2440' : '#f0edf6', height: 36}) },
+  titleStyle(light) { if (process.platform !== 'darwin') window.setTitleBarOverlay({color: light ? '#f0edeb' : '#191721', symbolColor: light ? '#2a2440' : '#f0edf6', height: 36}) },
   openExternal(url) { if (url === 'https://github.com/peterwangze/margin-editor') return shell.openExternal(url) },
 }
 

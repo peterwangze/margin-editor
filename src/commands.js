@@ -1,20 +1,24 @@
 import {formatJsonText} from '../shared/json.mjs'
 
 export const menus = {
-  File: ['new', 'open', 'openFolder', 'recent', 'quick', '—', 'save', 'saveAs', 'saveCopy', 'saveAll', 'reload', 'rename', 'reveal', 'trash', '—', 'close', 'closeOthers', 'closeAll', 'reopen', 'print', 'exportSession', 'importSession'],
+  File: ['new', 'open', 'openFolder', 'recent', 'quick', '—', 'save', 'saveAs', 'saveCopy', 'saveAll', 'reload', 'rename', 'reveal', 'trash', '—', 'close', 'closeOthers', 'closeAll', 'reopen', 'print', 'exportSession', 'importSession', 'importNotepadSession'],
   Edit: ['undo', 'redo', '—', 'cut', 'copy', 'paste', 'clipHistory', 'selectAll', 'selectNext', '—', 'column', 'duplicate', 'deleteLine', 'moveUp', 'moveDown', 'comment', 'blockComment', 'indent', 'outdent', 'overwrite', 'readOnly', '—', 'upper', 'lower', 'titleCase', 'invertCase', 'sort', 'sortDesc', 'sortNumeric', 'unique', 'removeEmpty', 'trim', 'trimLeading', 'join', 'reverse', 'tabsToSpaces', 'spacesToTabs', 'insertDate', 'characters'],
-  Search: ['find', 'replace', 'next', 'previous', 'projectSearch', 'findOpen', 'searchOptions', 'goto', 'symbol', '—', 'bookmark', 'markMatches', 'nextBookmark', 'prevBookmark', 'copyBookmarks', 'removeBookmarks', 'clearBookmarks'],
-  View: ['explorer', 'outline', 'split', 'splitBelow', 'clone', 'syncScroll', 'minimap', 'wrap', 'whitespace', 'lineNumbers', 'foldAll', 'unfoldAll', 'preview', 'diff', 'tail', 'fullscreen', 'zoomIn', 'zoomOut', 'zoomReset', 'theme'],
+  Search: ['find', 'replace', 'next', 'previous', 'wholeFile', 'projectSearch', 'findOpen', 'searchOptions', 'goto', 'symbol', '—', 'bookmark', 'markMatches', 'nextBookmark', 'prevBookmark', 'copyBookmarks', 'removeBookmarks', 'clearBookmarks'],
+  View: ['explorer', 'outline', 'split', 'splitBelow', 'clone', 'syncScroll', 'minimap', 'wrap', 'whitespace', 'lineNumbers', 'foldAll', 'unfoldAll', 'preview', 'diff', 'tail', 'fullscreen', 'zoomIn', 'zoomOut', 'zoomReset'],
   Encoding: ['convert', 'reinterpret', '—', 'lf', 'crlf', 'cr'],
   Language: ['language', 'customLanguage', 'importUdl', '—', 'formatJson', 'compactJson'],
-  Tools: ['palette', 'macroRecord', 'macroPlay', 'macroSave', 'macroLibrary', '—', 'run', 'tools', '—', 'base64Encode', 'base64Decode', 'hexEncode', 'hexDecode', 'urlEncode', 'urlDecode', 'sha256', 'sha1', 'md5', 'exportHtml', 'settings', 'keybindings'],
-  Help: ['about', 'repository'],
+  Settings: ['settings', 'keybindings', 'theme', 'importNotepadPreferences', 'importNotepadShortcuts'],
+  Tools: ['palette', '—', 'base64Encode', 'base64Decode', 'hexEncode', 'hexDecode', 'urlEncode', 'urlDecode', 'sha256', 'sha1', 'md5', 'exportHtml'],
+  Macro: ['macroRecord', 'macroPlay', 'macroSave', 'macroLibrary'],
+  Run: ['run', 'tools'],
+  Window: ['documents', 'previousTab', 'nextTab', '—', 'close', 'closeOthers', 'closeAll', 'reopen'],
+  Help: ['samples', 'about', 'repository'],
 }
 
 export const definitions = {
   new: ['New document', 'Mod+N'], open: ['Open files…', 'Mod+O'], openFolder: ['Open folder…', 'Mod+Shift+O'], recent: ['Recent files…'], quick: ['Quick open…', 'Mod+P'],
   save: ['Save', 'Mod+S'], saveAs: ['Save as…', 'Mod+Shift+S'], saveCopy: ['Save a copy…'], saveAll: ['Save all'], reload: ['Reload from disk'], rename: ['Rename file…'], reveal: ['Reveal in file manager'], trash: ['Move file to trash…'],
-  close: ['Close tab', 'Mod+W'], closeOthers: ['Close other tabs'], closeAll: ['Close all tabs'], reopen: ['Reopen closed tab', 'Mod+Shift+T'], print: ['Print…'], exportSession: ['Export session…'], importSession: ['Import session…'],
+  close: ['Close tab', 'Mod+W'], closeOthers: ['Close other tabs'], closeAll: ['Close all tabs'], reopen: ['Reopen closed tab', 'Mod+Shift+T'], print: ['Print…'], exportSession: ['Export session…'], importSession: ['Import Margin session…'], importNotepadSession: ['Import Notepad++ session…'],
   undo: ['Undo', 'Mod+Z'], redo: ['Redo', 'Mod+Y'], cut: ['Cut', 'Mod+X'], copy: ['Copy', 'Mod+C'], paste: ['Paste', 'Mod+V'], clipHistory: ['Clipboard history…'], selectAll: ['Select all', 'Mod+A'], selectNext: ['Add next occurrence to selection', 'Mod+Shift+D'],
   column: ['Column editor…', 'Alt+C'], duplicate: ['Duplicate line or selection', 'Mod+D'], deleteLine: ['Delete line', 'Mod+Shift+L'], moveUp: ['Move line up', 'Alt+ArrowUp'], moveDown: ['Move line down', 'Alt+ArrowDown'],
   comment: ['Toggle line comment', 'Mod+Q'], blockComment: ['Toggle block comment'], indent: ['Indent selection'], outdent: ['Outdent selection'], overwrite: ['Toggle overwrite', 'Insert'], readOnly: ['Toggle read-only'],
@@ -22,7 +26,10 @@ export const definitions = {
   find: ['Find', 'Mod+F'], replace: ['Replace', 'Mod+H'], next: ['Find next', 'F3'], previous: ['Find previous', 'Shift+F3'], projectSearch: ['Find in Files', 'Mod+Shift+F'], findOpen: ['Find in open documents'], searchOptions: ['Find options…'], goto: ['Go to line…', 'Mod+G'], symbol: ['Go to symbol…', 'Mod+Shift+G'], bookmark: ['Toggle bookmark', 'Mod+F2'], markMatches: ['Bookmark all matches'], nextBookmark: ['Next bookmark', 'F2'], prevBookmark: ['Previous bookmark', 'Shift+F2'], copyBookmarks: ['Copy bookmarked lines'], removeBookmarks: ['Remove bookmarked lines'], clearBookmarks: ['Clear bookmarks'],
   explorer: ['Toggle explorer', 'Mod+B'], outline: ['Toggle outline'], split: ['Split editor', 'Mod+\\'], splitBelow: ['Split editor below'], clone: ['Clone document to other pane'], syncScroll: ['Toggle synchronized scrolling'], minimap: ['Toggle document map'], wrap: ['Toggle word wrap'], whitespace: ['Toggle whitespace'], lineNumbers: ['Toggle line numbers'], foldAll: ['Fold all'], unfoldAll: ['Unfold all'], preview: ['Markdown preview'], diff: ['Compare with saved file'], tail: ['Toggle follow file'], fullscreen: ['Toggle full screen', 'F11'], zoomIn: ['Zoom in', 'Mod+='], zoomOut: ['Zoom out', 'Mod+-'], zoomReset: ['Reset zoom', 'Mod+0'], theme: ['Toggle Ink/Paper theme'],
   convert: ['Convert encoding…'], reinterpret: ['Reopen with encoding…'], lf: ['Convert to LF'], crlf: ['Convert to CRLF'], cr: ['Convert to CR'], language: ['Select language…'], customLanguage: ['Custom languages…'], importUdl: ['Import Notepad++ UDL…'], formatJson: ['Format JSON', 'Mod+Shift+I'], compactJson: ['Compact JSON'],
-  palette: ['Command Palette', 'Mod+Shift+P'], macroRecord: ['Start/stop macro recording'], macroPlay: ['Play last macro'], macroSave: ['Save last macro…'], macroLibrary: ['Saved macros…'], run: ['Run external tool…', 'F6'], tools: ['Saved external tools…'], base64Encode: ['Encode Base64'], base64Decode: ['Decode Base64'], hexEncode: ['Encode hexadecimal'], hexDecode: ['Decode hexadecimal'], urlEncode: ['Percent-encode text'], urlDecode: ['Percent-decode text'], sha256: ['Calculate SHA-256'], sha1: ['Calculate SHA-1'], md5: ['Calculate MD5'], exportHtml: ['Export highlighted HTML…'], settings: ['Settings…', 'Mod+,'], keybindings: ['Keyboard shortcuts…'], about: ['About Margin'], repository: ['Source and releases'],
+  palette: ['Command Palette', 'Mod+Shift+P'], macroRecord: ['Start/stop macro recording'], macroPlay: ['Play last macro'], macroSave: ['Save last macro…'], macroLibrary: ['Saved macros…'], run: ['Run external tool…', 'F6'], tools: ['Saved external tools…'], base64Encode: ['Encode Base64'], base64Decode: ['Decode Base64'], hexEncode: ['Encode hexadecimal'], hexDecode: ['Decode hexadecimal'], urlEncode: ['Percent-encode text'], urlDecode: ['Percent-decode text'], sha256: ['Calculate SHA-256'], sha1: ['Calculate SHA-1'], md5: ['Calculate MD5'], exportHtml: ['Export highlighted HTML…'], settings: ['Preferences…', 'Mod+,'], keybindings: ['Keyboard shortcuts…'], about: ['About Margin'], repository: ['Source and releases'],
+  documents: ['Open documents…'], previousTab: ['Previous tab', 'Mod+PageUp'], nextTab: ['Next tab', 'Mod+PageDown'], samples: ['Open sample documents'], wholeFile: ['Find across all pages…'],
+  importNotepadPreferences: ['Import Notepad++ preferences…'],
+  importNotepadShortcuts: ['Import Notepad++ shortcuts…'],
 }
 
 export function eventShortcut(event) {

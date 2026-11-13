@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react'
-import {Braces, File, FileText, FileCode, FilePlus, Folder, FolderOpen, Search, ListTree, Settings2, Columns2, ChevronDown, ChevronRight, Save, Scissors, Copy, Clipboard, Undo2, Redo2, X, Plus, Pin, Terminal, ArrowUp, ArrowDown, PanelLeft, Menu as MenuIcon} from 'lucide-react'
+import {Braces, File, FileText, FileCode, FilePlus, Folder, FolderOpen, Search, Replace, Settings2, Columns2, ChevronRight, Save, SaveAll, Printer, Scissors, Copy, Clipboard, Undo2, Redo2, X, Plus, Pin, Terminal, ArrowUp, ArrowDown, PanelLeft, WrapText, Pilcrow} from 'lucide-react'
 import {basename} from './documents'
 
 export const primaryKey = (navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+')
@@ -18,11 +18,18 @@ export function FileGlyph({name, size = 15}) {
   return <File size={size} className="glyph" aria-hidden="true" />
 }
 
-const toolButtons = [['new', FilePlus], ['open', FolderOpen], ['save', Save], ['cut', Scissors], ['copy', Copy], ['paste', Clipboard], ['undo', Undo2], ['redo', Redo2], ['split', Columns2]]
+const toolGroups = [
+  [['new', FilePlus, 'New'], ['open', FolderOpen, 'Open'], ['save', Save, 'Save'], ['saveAll', SaveAll, 'Save All'], ['print', Printer, 'Print']],
+  [['cut', Scissors, 'Cut'], ['copy', Copy, 'Copy'], ['paste', Clipboard, 'Paste']],
+  [['undo', Undo2, 'Undo'], ['redo', Redo2, 'Redo']],
+  [['find', Search, 'Find'], ['replace', Replace, 'Replace']],
+  [['wrap', WrapText, 'Word Wrap'], ['whitespace', Pilcrow, 'Whitespace'], ['split', Columns2, 'Split']],
+]
 
-export function Chrome({menus, commands, invoke, palette, platform}) {
+export function Chrome({menus, commands, invoke, platform, doc, toggled}) {
   const [open, setOpen] = useState(null)
   const menuRef = useRef(null)
+  const menuNames = Object.keys(menus)
   useEffect(() => {
     if (!open) return
     const outside = event => { if (!menuRef.current?.contains(event.target)) setOpen(null) }
@@ -30,8 +37,26 @@ export function Chrome({menus, commands, invoke, palette, platform}) {
     return () => document.removeEventListener('pointerdown', outside)
   }, [open])
   function navigate(event) {
-    if (event.key === 'Escape') { setOpen(null); return }
+    const headers = [...menuRef.current.querySelectorAll('.menu-group > button')]
+    const header = event.target.closest('.menu-group')?.querySelector('button')
+    if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(null); header?.focus(); return }
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault()
+      const index = (headers.indexOf(header) + (event.key === 'ArrowLeft' ? -1 : 1) + headers.length) % headers.length
+      if (open) setOpen(menuNames[index])
+      headers[index]?.focus()
+      return
+    }
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+    if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp') && header) {
+      event.preventDefault()
+      setOpen(menuNames[headers.indexOf(header)])
+      requestAnimationFrame(() => {
+        const commands = header.parentElement.querySelectorAll('.menu-items button:not(:disabled)')
+        commands[event.key === 'ArrowUp' ? commands.length - 1 : 0]?.focus()
+      })
+      return
+    }
     const items = [...menuRef.current.querySelectorAll('.menu-items button:not(:disabled)')]
     if (!items.length) return
     event.preventDefault()
@@ -41,7 +66,7 @@ export function Chrome({menus, commands, invoke, palette, platform}) {
   }
   const run = id => { setOpen(null); invoke(id) }
   return <>
-    <header className={`title-bar ${platform === 'darwin' ? 'mac' : ''}`}><div className="brand"><span className="brand-mark" aria-hidden="true">M</span><strong>Margin</strong></div></header>
+    <header className={`title-bar ${platform === 'darwin' ? 'mac' : ''}`}><div className="brand"><span className="brand-mark" aria-hidden="true">M</span><span className="window-name" title={doc.path ?? doc.name}>{doc.dirty && <span className="title-dirty" aria-label="Unsaved">● </span>}{doc.name} <span className="brand-caption">— Margin</span></span></div></header>
     <nav className="menu-bar" aria-label="Application menus" ref={menuRef} onKeyDown={navigate}>
       {Object.entries(menus).map(([name, ids]) => <div className="menu-group" key={name}>
         <button type="button" aria-expanded={open === name} onClick={() => setOpen(open === name ? null : name)} onMouseEnter={() => { if (open) setOpen(name) }}>{name}</button>
@@ -50,23 +75,10 @@ export function Chrome({menus, commands, invoke, palette, platform}) {
         </div>}
       </div>)}
     </nav>
-    <div className="toolbar" aria-label="File toolbar">
-      {toolButtons.map(([id, Icon], index) => <IconButton key={id} className={`${index === 3 || index === 6 ? 'tool-divider' : ''} ${index < 3 ? 'tool-text' : ''}`} icon={Icon} label={commands[id].label} disabled={commands[id].disabled} onClick={() => invoke(id)}>{index < 3 && <span>{['New', 'Open', 'Save'][index]}</span>}</IconButton>)}
-      <div className="toolbar-fill" />
-      <button type="button" className="palette-trigger" onClick={palette}><Search size={16} /><span>Command Palette</span><kbd>{shortcutLabel('Mod+Shift+P')}</kbd></button>
+    <div className="toolbar" role="toolbar" aria-label="Editor toolbar">
+      {toolGroups.map(group => <div className="tool-group" key={group[0][0]}>{group.map(([id, Icon, text]) => <IconButton key={id} icon={Icon} label={commands[id].label} title={[commands[id].label, shortcutLabel(commands[id].key)].filter(Boolean).join(' · ')} disabled={commands[id].disabled} aria-pressed={toggled[id]} onClick={() => invoke(id)}><span>{text}</span></IconButton>)}</div>)}
     </div>
   </>
-}
-
-export function Activity({panel, onPanel, split, settings}) {
-  return <aside className="activity" aria-label="Workspace tools">
-    <IconButton icon={Folder} label="Explorer" aria-pressed={panel === 'files'} onClick={() => onPanel('files')} />
-    <IconButton icon={Search} label="Find in Files" aria-pressed={panel === 'search'} onClick={() => onPanel('search')} />
-    <IconButton icon={ListTree} label="Outline" aria-pressed={panel === 'outline'} onClick={() => onPanel('outline')} />
-    <IconButton icon={Columns2} label="Split editor" onClick={split} />
-    <div className="toolbar-fill" />
-    <IconButton icon={Settings2} label="Settings" onClick={settings} />
-  </aside>
 }
 
 function TreeEntry({item, api, openPath, notify}) {
@@ -89,7 +101,7 @@ export function Explorer({docs, active, workspace, entries, api, openPath, focus
       <details open><summary><ChevronRight size={14} />Open Editors</summary>
         {docs.map(doc => <button className={`side-row ${doc.id === active ? 'active' : ''}`} key={doc.id} onClick={() => focusDoc(doc.id)} title={doc.path ?? doc.name}><FileGlyph name={doc.name} /><span>{doc.name}</span>{doc.dirty && <span className="dirty-mark" title="Unsaved" />}</button>)}
       </details>
-      <details open><summary><ChevronRight size={14} />{workspace ? basename(workspace) : 'Demo Workspace'}</summary>
+      <details open><summary><ChevronRight size={14} />{workspace ? basename(workspace) : 'Folder'}</summary>
         {workspace ? entries.map(item => <TreeEntry key={item.path} item={item} api={api} openPath={openPath} notify={notify} />) : docs.filter(doc => doc.sample).map(doc => <button key={doc.id} className="side-row" onClick={() => focusDoc(doc.id)}><FileGlyph name={doc.name} /><span>{doc.name}</span></button>)}
         <button className="side-row quiet" onClick={chooseFolder}><FolderOpen size={15} /><span>Open Folder…</span></button>
       </details>
@@ -105,7 +117,7 @@ export function Tabs({docs, active, focus, close, add, reorder, context, pane}) 
       {docs.map(doc => <div key={doc.id} className={`tab ${doc.id === active ? 'selected' : ''}`} ref={doc.id === active ? activeTab : null} draggable onDragStart={event => event.dataTransfer.setData('application/x-margin-tab', doc.id)} onDragOver={event => event.preventDefault()} onDrop={event => {
         const id = event.dataTransfer.getData('application/x-margin-tab')
         if (id) { event.preventDefault(); event.stopPropagation(); reorder(id, doc.id) }
-      }} onContextMenu={event => { event.preventDefault(); context(doc, event.clientX, event.clientY) }}>
+      }} onAuxClick={event => { if (event.button === 1) { event.preventDefault(); close(doc.id) } }} onContextMenu={event => { event.preventDefault(); context(doc, event.clientX, event.clientY) }}>
         <button type="button" className="tab-name" role="tab" aria-selected={doc.id === active} title={doc.path ?? doc.name} onClick={() => focus(doc.id)}><FileGlyph name={doc.name} /><span>{doc.name}</span>{doc.pinned && <Pin size={12} />}{doc.dirty && <span className="dirty-mark" aria-label="Unsaved" />}</button>
         <IconButton icon={X} className="tab-close" label={`Close ${doc.name}`} onClick={() => close(doc.id)} />
       </div>)}
@@ -118,8 +130,9 @@ export function FindBar({query, change, replace, result, index, next, apply, clo
   return <section className="findbar" aria-label="Find and replace" onKeyDown={event => { if (event.key === 'Escape') close() }}>
     <div className="find-row">
       <label htmlFor="find-value">Find</label><input ref={input} id="find-value" value={query.needle} onChange={event => change({needle: event.target.value})} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); next(event.shiftKey ? -1 : 1) } }} autoComplete="off" />
-      <div className="toggle-group"><button type="button" title="Match case" aria-label="Match case" aria-pressed={query.caseSensitive} onClick={() => change({caseSensitive: !query.caseSensitive})}>Aa</button><button type="button" title="Match whole word" aria-label="Match whole word" aria-pressed={query.whole} onClick={() => change({whole: !query.whole})}>ab</button><button type="button" title="Regular expression" aria-label="Regular expression" aria-pressed={query.mode === 'regex'} onClick={() => change({mode: query.mode === 'regex' ? 'literal' : 'regex'})}>.*</button></div>
-      <div className="toggle-group arrows"><IconButton icon={ArrowUp} label="Previous match" onClick={() => next(-1)} /><IconButton icon={ArrowDown} label="Next match" onClick={() => next(1)} /></div>
+      <label className="find-check"><input type="checkbox" checked={query.caseSensitive} onChange={event => change({caseSensitive: event.target.checked})} /><span>Match case</span></label><label className="find-check"><input type="checkbox" checked={query.whole} onChange={event => change({whole: event.target.checked})} /><span>Whole word</span></label>
+      <div className="toggle-group"><button type="button" title="Regular expression" aria-label="Regular expression" aria-pressed={query.mode === 'regex'} onClick={() => change({mode: query.mode === 'regex' ? 'literal' : 'regex'})}>.*</button></div>
+      <div className="find-arrows"><IconButton className="outline-button" icon={ArrowUp} label="Previous match" onClick={() => next(-1)}><span>Previous</span></IconButton><IconButton className="primary-button" icon={ArrowDown} label="Next match" onClick={() => next(1)}><span>Find Next</span></IconButton></div>
       <span className="find-count" role="status">{result.pending ? 'Searching…' : result.error ? 'Search error' : result.matches.length ? `${index < 0 ? '0' : index + 1} of ${result.matches.length}${result.truncated ? '+' : ''}` : 'No matches'}</span>
       <IconButton icon={Settings2} label="Search options" onClick={options} /><IconButton icon={X} label="Close find" onClick={close} />
     </div>

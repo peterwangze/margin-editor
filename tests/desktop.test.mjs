@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import {_electron as electron, expect} from '@playwright/test'
 import {encode} from '../desktop/codec.mjs'
+import {EDIT_LIMIT, PAGE_SIZE} from '../desktop/files.mjs'
 
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control'
 const executablePath = process.env.MARGIN_EXECUTABLE || undefined
@@ -84,7 +85,8 @@ test('I03 choose folder, filter by depth, preview, select and replace on disk', 
     await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
   })
   await app.evaluate(({dialog}) => { dialog.showMessageBox = async () => ({response: 0}) })
-  await page.getByRole('button', {name: 'Find in Files', exact: true}).click()
+  await page.getByRole('button', {name: 'Search', exact: true}).click()
+  await page.getByRole('button', {name: /^Find in Files/}).click()
   await expect(page.getByRole('complementary', {name: 'Workspace search'})).toBeVisible()
   await expect(page.getByRole('button', {name: 'workspace', exact: true})).toBeVisible()
   await page.getByRole('textbox', {name: 'Find in files'}).fill('error (\\d+)')
@@ -101,6 +103,76 @@ test('I03 choose folder, filter by depth, preview, select and replace on disk', 
   await expect(page.getByText('Updated 1 file.')).toBeVisible()
   assert.equal(await fs.readFile(path.join(workspace, 'one.txt'), 'utf8'), 'fixed 17\r\n')
   assert.equal(await fs.readFile(path.join(nested, 'two.txt'), 'utf8'), 'error 22\n')
+})
+
+test('I07 imports a Notepad++ session with two views, byte selections, bookmarks and an unsaved backup', {timeout: 45000}, async t => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-import-'))
+  const profile = path.join(temp, 'profile')
+  await fs.mkdir(profile)
+  await fs.writeFile(path.join(temp, 'work.txt'), 'é😀\r\nhello\r\n')
+  await fs.writeFile(path.join(temp, 'backup.txt'), 'unsaved words\n')
+  const session = path.join(temp, 'session.xml')
+  await fs.writeFile(session, `<NotepadPlus><Session activeView="1"><mainView activeIndex="0"><File filename="work.txt" startPos="8" endPos="13" tabPinned="yes"><Mark line="1"/></File></mainView><subView activeIndex="0"><File filename="new 3" backupFilePath="backup.txt" startPos="0" endPos="7"/><File filename="absent.txt"/></subView></Session></NotepadPlus>`)
+  const {app, page} = await launch(profile)
+  t.after(async () => {
+    await app.close().catch(() => {})
+    await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  await page.getByRole('button', {name: 'File', exact: true}).click()
+  const chooser = page.waitForEvent('filechooser')
+  await page.getByRole('button', {name: 'Import Notepad++ session…'}).click()
+  await (await chooser).setFiles(session)
+  const primary = page.getByRole('region', {name: 'Primary editor'})
+  const secondary = page.getByRole('region', {name: 'Secondary editor'})
+  await expect(primary.getByRole('tab', {name: 'work.txt', exact: true})).toHaveAttribute('aria-selected', 'true')
+  await expect(primary.locator('.bookmark-gutter-mark')).toHaveCount(1)
+  await expect(secondary.getByRole('tab', {name: /new 3 \(recovered\)/})).toHaveAttribute('aria-selected', 'true')
+  await expect(secondary.getByRole('textbox', {name: 'Document editor'})).toBeFocused()
+  await expect(page.getByText(/Could not open:.*absent\.txt/s)).toBeVisible()
+  await page.keyboard.insertText('changed')
+  await expect(secondary.locator('.cm-line').first()).toHaveText('changed words')
+  await primary.getByRole('tab', {name: 'work.txt', exact: true}).click()
+  await page.keyboard.insertText('world')
+  await expect(primary.locator('.cm-line').nth(1)).toHaveText('world')
+  assert.equal(await fs.readFile(path.join(temp, 'work.txt'), 'utf8'), 'é😀\r\nhello\r\n')
+  assert.equal(await fs.readFile(path.join(temp, 'backup.txt'), 'utf8'), 'unsaved words\n')
+})
+
+test('I04 opens a large-file search result on another page and saves edits to that page', {timeout: 45000}, async t => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-large-ui-'))
+  const profile = path.join(temp, 'profile')
+  await fs.mkdir(profile)
+  const file = path.join(temp, 'large.log')
+  const block = Buffer.from(('this is a log line '.padEnd(127, '.') + '\n').repeat(PAGE_SIZE / 128))
+  const handle = await fs.open(file, 'w')
+  try {
+    for (let i = 0; i < EDIT_LIMIT / PAGE_SIZE; i++) await handle.writeFile(block)
+    await handle.writeFile('unique message here\r\n')
+  } finally { await handle.close() }
+  const {app, page} = await launch(profile, [file])
+  t.after(async () => {
+    await app.close().catch(() => {})
+    await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  await page.getByRole('button', {name: 'Find Across Pages…'}).click()
+  const dialog = page.getByRole('dialog', {name: 'Find Across All Pages'})
+  await dialog.getByRole('textbox', {name: 'Find'}).fill('unique')
+  await dialog.getByRole('button', {name: 'Find All'}).click()
+  await dialog.getByRole('button', {name: /^Page 49/}).click()
+  await expect(page.locator('.cm-line').first()).toHaveText('unique message here')
+  await expect(page.getByRole('textbox', {name: 'Document editor'})).toBeFocused()
+  await page.keyboard.insertText('edited')
+  await expect(page.locator('.cm-line').first()).toHaveText('edited message here')
+  await expect(page.getByRole('button', {name: 'Previous page'})).toBeDisabled()
+  await page.keyboard.press(`${mod}+s`)
+  await expect(page.getByText('Saved large.log', {exact: true})).toBeVisible()
+  await expect(page.getByRole('button', {name: 'Previous page'})).toBeEnabled()
+  const saved = await fs.open(file, 'r')
+  try {
+    const tail = Buffer.alloc(21)
+    await saved.read(tail, 0, tail.length, EDIT_LIMIT)
+    assert.equal(tail.toString(), 'edited message here\r\n')
+  } finally { await saved.close() }
 })
 
 test('I05 deleting and undoing a mixed line break restores its exact format', {timeout: 45000}, async t => {

@@ -2,12 +2,13 @@ import {useEffect, useLayoutEffect, useRef} from 'react'
 import {EditorState, Compartment, Annotation, StateEffect, StateField, Transaction, EditorSelection} from '@codemirror/state'
 import {EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightSpecialChars, highlightWhitespace, Decoration, GutterMarker, gutter, placeholder} from '@codemirror/view'
 import {defaultKeymap, history, historyKeymap, indentWithTab, invertedEffects} from '@codemirror/commands'
-import {foldGutter, foldKeymap, bracketMatching, indentOnInput, indentUnit, syntaxHighlighting, HighlightStyle, StreamLanguage} from '@codemirror/language'
+import {foldGutter, foldKeymap, bracketMatching, indentOnInput, indentUnit, syntaxHighlighting, HighlightStyle, StreamLanguage, foldable, foldEffect, ensureSyntaxTree} from '@codemirror/language'
 import {closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap} from '@codemirror/autocomplete'
 import {highlightSelectionMatches} from '@codemirror/search'
 import {languages} from '@codemirror/language-data'
 import {tags} from '@lezer/highlight'
 import {updateMixed} from '../shared/text.mjs'
+import {udlMode} from './notepad-udl'
 
 export const syntax = syntaxHighlighting(HighlightStyle.define([
   {tag: [tags.propertyName, tags.keyword, tags.controlKeyword, tags.heading], color: 'var(--token-key)'},
@@ -100,6 +101,7 @@ export function modeFor(doc, custom = []) {
 }
 
 function customMode(mode) {
+  if (mode.udl) return udlMode(mode)
   const keywords = new Set(mode.keywords.split(/\s+/).filter(Boolean))
   return StreamLanguage.define({token(stream) {
     if (stream.eatSpace()) return null
@@ -117,7 +119,7 @@ function editorOptions(settings, doc) {
   return [settings.numbers ? lineNumbers() : [], highlightActiveLineGutter(), settings.whitespace && !large ? highlightWhitespace() : [],
     settings.wrap && !large ? EditorView.lineWrapping : [], EditorState.tabSize.of(settings.tabSize), indentUnit.of(settings.spaces ? ' '.repeat(settings.tabSize) : '\t'),
     EditorState.readOnly.of(doc.readOnly), EditorView.editable.of(!doc.readOnly),
-    EditorView.contentAttributes.of({dir: settings.rtl ? 'rtl' : 'ltr', 'aria-label': 'Document editor', spellcheck: 'false'}),
+    EditorView.contentAttributes.of({dir: (doc.rtl ?? settings.rtl) ? 'rtl' : 'ltr', 'aria-label': 'Document editor', spellcheck: 'false'}),
     settings.autocomplete && !large ? autocompletion() : [], large ? [] : [foldGutter(), highlightSelectionMatches(), highlightSpecialChars(), bracketMatching(), closeBrackets(), indentOnInput()]]
 }
 
@@ -159,7 +161,9 @@ export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, ac
   useLayoutEffect(() => {
     const {mode, options} = compartments.current
     const saved = cache.current.get(doc.id)
-    const base = saved?.epoch === doc.epoch && saved?.state.doc.toString() === doc.text ? saved.state : EditorState.create({doc: doc.text, selection: {anchor: Math.min(doc.cursor ?? 0, doc.text.length)}, extensions: [
+    const position = doc.positions?.[slot]
+    const clamp = value => Math.min(value ?? 0, doc.text.length)
+    const base = saved?.epoch === doc.epoch && saved?.state.doc.toString() === doc.text ? saved.state : EditorState.create({doc: doc.text, selection: {anchor: clamp(position?.anchor ?? doc.cursor), head: clamp(position?.head ?? doc.cursor)}, extensions: [
       history(), rememberFormat, formatField.init(() => ({eol: doc.eol, mixed: doc.mixed, version: doc.formatVersion ?? 0})), drawSelection(), dropCursor(), rectangularSelection(), crosshairCursor(), highlightActiveLine(), syntax, searchMarks, bookmarkField, bookmarksGutter, overwrite, overwriteInput,
       placeholder('Start typing…'), EditorState.allowMultipleSelections.of(true), mode.of([]), options.of(editorOptions(settings, doc)),
       keymap.of([indentWithTab, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...foldKeymap, ...completionKeymap]),
@@ -177,7 +181,12 @@ export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, ac
     setEditorBookmarks(view, doc.bookmarks)
     current.current.attach(slot, view, doc.id)
     const scroller = view.scrollDOM
-    if (saved) scroller.scrollTop = saved.top
+    if (saved && saved.epoch === doc.epoch) scroller.scrollTop = saved.top
+    else if (position) {
+      const line = view.state.doc.line(Math.min(view.state.doc.lines, position.top + 1))
+      view.dispatch({effects: EditorView.scrollIntoView(line.from, {y: 'start'})})
+      scroller.scrollLeft = position.horizontal
+    }
     const scroll = () => current.current.onScroll(slot, scroller)
     scroller.addEventListener('scroll', scroll, {passive: true})
     return () => {
@@ -193,18 +202,31 @@ export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, ac
     const view = viewRef.current
     if (!view) return
     view.dispatch({effects: compartments.current.options.reconfigure(editorOptions(settings, doc))})
-  }, [doc.id, doc.epoch, doc.readOnly, doc.size, settings])
+  }, [doc.id, doc.epoch, doc.readOnly, doc.rtl, doc.size, settings])
 
   useEffect(() => {
     const view = viewRef.current
     let alive = true
     const mode = modeFor(doc, settings.languages)
-    const apply = extension => { if (alive) view.dispatch({effects: compartments.current.mode.reconfigure(extension)}) }
+    const apply = extension => {
+      if (!alive) return
+      view.dispatch({effects: compartments.current.mode.reconfigure(extension)})
+      const lines = doc.positions?.[slot]?.folds?.filter(number => number <= view.state.doc.lines) ?? []
+      if (!lines.length || Array.isArray(extension) && !extension.length) return
+      const last = view.state.doc.line(Math.max(...lines))
+      ensureSyntaxTree(view.state, last.to, 60)
+      const effects = lines.flatMap(number => {
+        const line = view.state.doc.line(number)
+        const range = foldable(view.state, line.from, line.to)
+        return range ? [foldEffect.of(range)] : []
+      })
+      if (effects.length) view.dispatch({effects})
+    }
     if (doc.size > 2 * 1024 * 1024 || !mode) apply([])
     else if (mode.load) mode.load().then(apply).catch(() => apply([]))
     else apply(customMode(mode))
     return () => { alive = false }
-  }, [doc.id, doc.epoch, doc.name, doc.language, doc.size, settings.languages])
+  }, [doc.id, doc.epoch, doc.name, doc.language, doc.size, settings.languages, slot])
 
   useLayoutEffect(() => {
     const view = viewRef.current

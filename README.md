@@ -8,25 +8,27 @@ Open a log, change a config, or clean up a whole folder of files. Margin puts th
 
 [All releases](https://github.com/peterwangze/margin-editor/releases) · [Design and architecture](docs/architecture.md) · [Release acceptance checklist](docs/acceptance.md)
 
-## Download Margin 0.9.0
+## Download Margin 0.9.1
 
 Choose the offline package for your operating system and processor. This version is a public prerelease.
 
 | Platform | Intel / AMD 64-bit | ARM64 |
 | --- | --- | --- |
-| Windows | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-x64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-x64-portable.exe) | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-arm64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-win-arm64-portable.exe) |
-| macOS | [DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-x64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-x64.zip) | [Apple Silicon DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-arm64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-mac-arm64.zip) |
-| Linux | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-x86_64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-amd64.deb) | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-arm64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/Margin-0.9.0-linux-arm64.deb) |
+| Windows | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-x64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-x64-portable.exe) | [Installer](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-arm64-setup.exe) · [Portable EXE](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-win-arm64-portable.exe) |
+| macOS | [DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-x64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-x64.zip) | [Apple Silicon DMG](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-arm64.dmg) · [ZIP](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-mac-arm64.zip) |
+| Linux | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-x86_64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-amd64.deb) | [AppImage](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-arm64.AppImage) · [DEB](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/Margin-0.9.1-linux-arm64.deb) |
 
-[Release notes and assets](https://github.com/peterwangze/margin-editor/releases/tag/v0.9.0) · [SHA-256 checksums](https://github.com/peterwangze/margin-editor/releases/download/v0.9.0/SHA256SUMS.txt)
+[Release notes and assets](https://github.com/peterwangze/margin-editor/releases/tag/v0.9.1) · [SHA-256 checksums](https://github.com/peterwangze/margin-editor/releases/download/v0.9.1/SHA256SUMS.txt)
 
-![Margin's Ink workbench with a folder sidebar, tabs, syntax highlighting, and an interactive status bar](docs/screenshots/workbench.png)
+![Margin's Paper theme with a grouped toolbar, document tabs, full-width editor, and interactive status bar](docs/screenshots/workbench.png)
 
 ## From a quick edit to a folder-wide change
 
-- **Start where you left off.** Open local files or folders, drop them into the window, or use the command line. Unsaved documents return with your session. Split the editor, clone a document into two views, or page through a large log in read-only mode.
+- **Open straight into a document.** Start typing in a blank file, drop local files into the window, or use the familiar toolbar. The folder tree opens on demand. Split or clone a document when you need another view.
+- **Bring your Notepad++ setup.** Import sessions with bookmarks and recoverable backups, common preferences, supported menu shortcuts, and user languages with keyword colors, delimiters, and folds.
 - **Review replacements before writing.** Find literal text, extended escapes, or regex captures. Filter folder searches by glob and depth, review before-and-after results, and choose which files to update. Margin checks that files still match the preview before applying it.
 - **Keep control of your files.** Reopen with a different encoding, convert on save, or pick an EOL format from the status bar. When a file changes on disk, compare the two versions and choose how to proceed. Optional backup copies preserve the previous bytes.
+- **Work on a large log one page at a time.** Search across all pages and jump to a match. Edit the page and save while preserving the untouched bytes in supported encodings.
 - **Turn repetitive edits into commands.** Use rectangular selections, multiple cursors, bookmarks, line transformations, and replayable edit macros. Open the command palette to find JSON formatting, Markdown preview, encoding utilities, and local tools.
 
 ![In-document Find and Replace with a highlighted match and accessible controls](docs/screenshots/find.png)
@@ -52,7 +54,7 @@ Packages bundle Electron and the UI assets. Linux still uses the system's deskto
 
 ## Compatibility
 
-Margin 0.9.0 is an early release. The [Notepad++ comparison](docs/research.md) and [acceptance checklist](docs/acceptance.md) track migration coverage, including open work for Win32 plugins, full UDL import, Boost regex syntax, and large files beyond the 48 MiB editing limit. The [test and packaging workflow](.github/workflows/build.yml) records each build's platform coverage.
+The [Notepad++ comparison](docs/research.md) and [acceptance checklist](docs/acceptance.md) track coverage and remaining work, including native Win32 plugins, full UDL behavior, Boost regex, and whole-file regex replace in large documents. The [test and packaging workflow](.github/workflows/build.yml) records each build's platform coverage.
 
 ## Develop locally
 

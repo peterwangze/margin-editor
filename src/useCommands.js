@@ -4,7 +4,7 @@ import {foldAll, unfoldAll, syntaxTree} from '@codemirror/language'
 import {selectNextOccurrence} from '@codemirror/search'
 import {highlightTree, classHighlighter} from '@lezer/highlight'
 import {encodings} from '../shared/text.mjs'
-import {basename, dirname, symbolsFor} from './documents'
+import {basename, demoDocuments, dirname, symbolsFor} from './documents'
 import {focusEditor, goTo, insertAtSelections, toggleOverwrite} from './editor'
 import {definitions, lineTransforms, menus, transforms} from './commands'
 
@@ -136,7 +136,17 @@ export function useCommands(ctx) {
   const toolFields = [field('name', 'Name', '', {placeholder: 'Optional'}), field('executable', 'Executable', '', {required: true}), field('args', 'Arguments (JSON)', '[]', {type: 'textarea'})]
 
   const actions = {
-    new: () => m.create(), open: () => m.open(), openFolder: () => m.pickFolder(),
+    new: () => m.create(), open: () => m.open(), openFolder: async () => { if (await m.pickFolder()) setPanel(current => current || 'files') },
+    samples: () => {
+      const existing = m.docs.find(item => item.sample && item.name === 'notes.txt')
+      if (existing) return m.focus(existing.id)
+      const samples = demoDocuments().filter(sample => !m.docs.some(item => item.sample && item.name === sample.name))
+      m.commit(items => [...items, ...samples])
+      m.focus(samples.at(-1).id)
+    },
+    documents: () => pick('Open Documents', m.docs.map(item => ({id: item.id, label: item.name, detail: item.path})), item => m.focus(item.id)),
+    previousTab: () => m.focus(m.docs[(m.docs.findIndex(item => item.id === doc.id) + m.docs.length - 1) % m.docs.length].id),
+    nextTab: () => m.focus(m.docs[(m.docs.findIndex(item => item.id === doc.id) + 1) % m.docs.length].id),
     recent: () => pick('Recent Files', m.recent.map(path => ({id: path, label: basename(path), detail: path})), item => m.openPath(item.id)),
     quick: () => pick('Quick Open', [...m.docs.map(item => ({id: item.id, label: item.name, detail: item.path, open: true})), ...m.entries.filter(item => !item.dir && !m.docs.some(doc => doc.path === item.path)).map(item => ({id: item.path, label: item.name, detail: item.path}))], item => item.open ? m.focus(item.id) : m.openPath(item.id)),
     save: () => m.save(), saveAs: () => m.save(doc.id, 'as'), saveCopy: () => m.save(doc.id, 'copy'),
@@ -162,6 +172,9 @@ export function useCommands(ctx) {
     },
     exportSession: () => download('margin-session.json', JSON.stringify(m.snapshot.current(), null, 2)),
     importSession: () => pickImport('session'),
+    importNotepadSession: () => pickImport('notepad-session'),
+    importNotepadPreferences: () => pickImport('notepad-preferences'),
+    importNotepadShortcuts: () => pickImport('notepad-shortcuts'),
     copy: () => copy(), cut: () => copy(true), paste,
     clipHistory: () => pick('Clipboard History', clip.current.map((value, id) => ({id, label: value.slice(0, 120), value})), item => insertAtSelections(m.selectedView(), () => item.value)),
     duplicate: () => alter(view => view.state.selection.ranges.every(range => range.empty) ? copyLineDown(view) : view.dispatch(view.state.changeByRange(range => {
@@ -179,6 +192,7 @@ export function useCommands(ctx) {
       insertAtSelections(m.selectedView(), () => String.fromCodePoint(parseInt(clean, 16)))
     }),
     find: () => find.open('find'), replace: () => find.open('replace'), next: () => find.next(1), previous: () => find.next(-1), projectSearch: () => setPanel('search'),
+    wholeFile: () => setDialog({kind: 'large-search'}),
     findOpen: () => ctx.openDocumentsSearch(),
     searchOptions: () => textDialog('Find options', [field('mode', 'Search mode', find.query.mode, {options: ['literal', 'extended', 'regex']}), field('wrap', 'Wrap around', find.query.wrap, {type: 'checkbox'}), field('dotAll', 'Dot matches newline', find.query.dotAll, {type: 'checkbox'}), field('inSelection', 'In selection', find.query.inSelection, {type: 'checkbox'})], value => { find.change(value); if (!find.show) find.setShow('find') }),
     goto: () => textDialog('Go to line', [field('line', 'Line', '1', {type: 'number', required: true, min: 1}), field('column', 'Column', '1', {type: 'number', min: 1})], ({line, column}) => goTo(m.selectedView(), Number(line), Number(column))),
@@ -226,7 +240,7 @@ export function useCommands(ctx) {
     settings: () => setDialog({kind: 'settings'}),
     keybindings: () => pick('Keyboard Shortcuts', Object.entries(definitions).map(([id, [label, key]]) => ({id, label, key: m.settings.shortcuts[id] ?? key})), item => textDialog(item.label, [field('key', 'Shortcut', item.key ?? '', {placeholder: 'Mod+Shift+K'})], ({key}) => {
       const canonical = key.trim()
-      if (canonical && !/^(?:(?:Mod|Alt|Shift)\+)*(?:[A-Z0-9,.=;\-/\\]|F(?:[1-9]|1[0-2])|Arrow(?:Up|Down|Left|Right)|Insert|Home|End|Delete|Tab)$/.test(canonical)) throw new Error('Use Mod+Shift+K style shortcuts with an uppercase key.')
+      if (canonical && !/^(?:(?:Mod|Alt|Shift)\+)*(?:[A-Z0-9,.=;\-/\\]|F(?:[1-9]|1[0-2])|Arrow(?:Up|Down|Left|Right)|Page(?:Up|Down)|Insert|Home|End|Delete|Tab)$/.test(canonical)) throw new Error('Use Mod+Shift+K style shortcuts with an uppercase key.')
       const duplicate = Object.entries(definitions).find(([id, [, defaultKey]]) => id !== item.id && (m.settings.shortcuts[id] ?? defaultKey) === canonical)
       if (canonical && duplicate) throw new Error(`That shortcut is already assigned to ${duplicate[1][0]}.`)
       setting({shortcuts: {...m.settings.shortcuts, [item.id]: canonical}})
@@ -243,7 +257,7 @@ export function useCommands(ctx) {
     setOutput({title: id.toUpperCase(), text: value})
   }
   const requiresPath = new Set(['reload', 'reveal', 'rename', 'trash', 'reinterpret', 'tail'])
-  const requiresEditableSize = new Set(['save', 'saveAs', 'saveCopy', 'rename', 'readOnly', 'convert', 'lf', 'crlf', 'cr', 'diff'])
+  const requiresWholeDocument = new Set(['saveAs', 'saveCopy', 'rename', 'readOnly', 'convert', 'lf', 'crlf', 'cr', 'diff'])
   const groups = Object.fromEntries(Object.entries(menus).flatMap(([group, ids]) => ids.map(id => [id, group])))
-  return Object.fromEntries(Object.entries(definitions).map(([id, [label, key]]) => [id, {id, group: groups[id], label: id === 'macroRecord' && recording ? 'Stop macro recording' : label, key: m.settings.shortcuts[id] ?? key, action: actions[id], disabled: (requiresPath.has(id) && !doc.path) || (Boolean(doc.large) && requiresEditableSize.has(id))}]))
+  return Object.fromEntries(Object.entries(definitions).map(([id, [label, key]]) => [id, {id, group: groups[id], label: id === 'macroRecord' && recording ? 'Stop macro recording' : label, key: m.settings.shortcuts[id] ?? key, action: actions[id], disabled: (id === 'wholeFile' && (!doc.large?.editable || doc.dirty)) || (requiresPath.has(id) && !doc.path) || (Boolean(doc.large) && (requiresWholeDocument.has(id) || id === 'save' && doc.readOnly))}]))
 }

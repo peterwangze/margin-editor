@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import {createHash, randomUUID} from 'node:crypto'
-import {decode, encode} from './codec.mjs'
+import {decode, decodeSegment, encode} from './codec.mjs'
 
 export const EDIT_LIMIT = 48 * 1024 * 1024
 export const PAGE_SIZE = 1024 * 1024
@@ -32,13 +32,17 @@ export async function readDocument(filename, encoding) {
 }
 
 export function largeFingerprint(stat) {
-  return `paged:${stat.size}:${stat.mtimeMs}`
+  return `paged:${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
 }
 
 function utf8Boundary(bytes, start) {
   let index = start
   while (index > 0 && index < bytes.length && index > start - 3 && (bytes[index] & 0xc0) === 0x80) index--
   return index
+}
+
+export function supportsPagedEditing(encoding) {
+  return /^(UTF-(8|16|32)\b|Windows-125[0-8]$|ISO-8859-\d+$|IBM\d+$|CP(?:[78]\d{2})$|KOI8-[RU]$|Macintosh$)/i.test(encoding)
 }
 
 export async function readLargePage(filename, requested, page = 0) {
@@ -83,9 +87,19 @@ export async function readLargePage(filename, requested, page = 0) {
       from = align(from)
       to = align(to)
     }
-    const result = decode(buffer.subarray(from, to), encoding)
-    return {...result, path: file, name: path.basename(file), size: stat.size, mtime: stat.mtimeMs, fingerprint: largeFingerprint(stat), readOnly: true,
-      large: {index, pages, offset: before + from, end: before + to}}
+    const width = encoding.startsWith('UTF-32') ? 4 : encoding.startsWith('UTF-16') ? 2 : 1
+    const little = encoding.includes('LE')
+    const unit = width === 4 ? little ? at => buffer.readUInt32LE(at) : at => buffer.readUInt32BE(at)
+      : width === 2 ? little ? at => buffer.readUInt16LE(at) : at => buffer.readUInt16BE(at) : at => buffer[at]
+    const avoidCRLF = at => at >= width && at + width <= buffer.length && unit(at - width) === 13 && unit(at) === 10 ? at - width : at
+    from = avoidCRLF(from)
+    to = avoidCRLF(to)
+    const bytes = buffer.subarray(from, to)
+    const result = decodeSegment(bytes, encoding, before + from === 0)
+    const editable = supportsPagedEditing(encoding) && !result.lossy && !result.binary
+    if (largeFingerprint(await handle.stat()) !== largeFingerprint(stat)) throw new Error('The file changed while this page was being read. Try again.')
+    return {...result, path: file, name: path.basename(file), size: stat.size, mtime: stat.mtimeMs, fingerprint: largeFingerprint(stat), readOnly: !editable,
+      large: {index, pages, offset: before + from, end: before + to, editable, digest: fingerprint(bytes)}}
   } finally { await handle.close() }
 }
 
@@ -100,12 +114,50 @@ export async function atomicWrite(file, bytes, {validate, mode} = {}) {
     const handle = await fs.open(temporary, 'wx', mode ?? 0o600)
     try {
       if (mode !== undefined && process.platform !== 'win32') await handle.chmod(mode)
-      await handle.writeFile(bytes)
+      if (typeof bytes === 'function') await bytes(handle)
+      else await handle.writeFile(bytes)
       await handle.sync()
     } finally { await handle.close() }
     await validate?.()
     await fs.rename(temporary, file)
   } finally { await fs.unlink(temporary).catch(() => {}) }
+}
+
+async function copyRange(input, output, start, end) {
+  const buffer = Buffer.allocUnsafe(PAGE_SIZE)
+  let position = start
+  while (position < end) {
+    const length = Math.min(buffer.length, end - position)
+    const {bytesRead} = await input.read(buffer, 0, length, position)
+    if (!bytesRead) throw new Error('The source file was truncated during save.')
+    await output.writeFile(buffer.subarray(0, bytesRead))
+    position += bytesRead
+  }
+}
+
+export async function saveLargePage(filename, document, expected, {backup = false} = {}) {
+  const file = await fs.realpath(filename)
+  const {large, encoding} = document
+  const conflict = () => new Error('This file changed on disk. Reload it before saving the page.')
+  const old = await readLargePage(file, encoding, large.index)
+  if (old.fingerprint !== expected || old.large.digest !== large.digest || old.large.offset !== large.offset || old.large.end !== large.end) throw conflict()
+  if (!old.large.editable) throw new Error('This page cannot be encoded losslessly.')
+  const encoded = encode(document, large.offset === 0)
+  const input = await fs.open(file, 'r')
+  let originalClosed = false
+  try {
+    const stat = await input.stat()
+    const check = async () => { if (largeFingerprint(await fs.stat(file)) !== expected || largeFingerprint(await input.stat()) !== expected) throw conflict() }
+    await check()
+    if (backup) await atomicWrite(`${file}.margin-backup`, handle => copyRange(input, handle, 0, stat.size), {validate: check})
+    await atomicWrite(file, async handle => {
+      await copyRange(input, handle, 0, large.offset)
+      await handle.writeFile(encoded)
+      await copyRange(input, handle, large.end, stat.size)
+    }, {validate: async () => { await check(); await input.close(); originalClosed = true }, mode: stat.mode & 0o777})
+  } finally { if (!originalClosed) await input.close() }
+  const stat = await fs.stat(file)
+  return stat.size > EDIT_LIMIT ? readLargePage(file, encoding, large.index) : readDocument(file, encoding)
 }
 
 export async function saveDocument(filename, document, expected, {backup = false} = {}) {

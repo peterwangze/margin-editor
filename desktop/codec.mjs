@@ -12,7 +12,11 @@ function format(name) {
 }
 
 export function decode(bytes, requested) {
-  const bom = formats.find(([, , prefix]) => prefix.length && bytes.subarray(0, prefix.length).equals(Buffer.from(prefix)))
+  return decodeSegment(bytes, requested, true)
+}
+
+export function decodeSegment(bytes, requested, allowBom) {
+  const bom = allowBom && formats.find(([, , prefix]) => prefix.length && bytes.subarray(0, prefix.length).equals(Buffer.from(prefix)))
   let guessed = bom?.[0] ?? 'UTF-8'
   if (!requested && !bom) {
     const sample = bytes.subarray(0, 4096)
@@ -34,11 +38,11 @@ export function decode(bytes, requested) {
   return {...newlines(decoded), encoding, lossy, binary: decoded.includes('\0')}
 }
 
-export function encode(document) {
+export function encode(document, includeBom = true) {
   const [, codec, prefix] = format(document.encoding)
   const text = withNewlines(document)
   if (!text.isWellFormed()) throw new Error('The document contains an unmatched Unicode surrogate.')
   const encoded = iconv.encode(text, codec)
   if (iconv.decode(encoded, codec, {stripBOM: false}) !== text) throw new Error(`Some characters cannot be represented in ${document.encoding}. Choose another encoding.`)
-  return prefix.length ? Buffer.concat([Buffer.from(prefix), encoded]) : encoded
+  return includeBom && prefix.length ? Buffer.concat([Buffer.from(prefix), encoded]) : encoded
 }

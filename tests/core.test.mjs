@@ -4,7 +4,8 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import {encode, decode} from '../desktop/codec.mjs'
-import {readDocument, saveDocument, readLargePage, EDIT_LIMIT, PAGE_SIZE} from '../desktop/files.mjs'
+import {readDocument, saveDocument, readLargePage, saveLargePage, EDIT_LIMIT, PAGE_SIZE} from '../desktop/files.mjs'
+import {searchLargeFile} from '../desktop/large-search.mjs'
 import {searchWorkspace, applyWorkspace} from '../desktop/workspace.mjs'
 import {findMatches, replaceMatches, emptyQuery, newlines, withNewlines, updateMixed, encodings} from '../shared/text.mjs'
 import {formatJsonText} from '../shared/json.mjs'
@@ -95,6 +96,26 @@ test('F04 large-file pages are bounded and do not split a UTF-8 code point', asy
   assert.ok(two.text.startsWith('🙂\nsecond'))
   assert.equal(two.readOnly, true)
   assert.equal(two.lossy, false)
+})
+
+test('F04 paged writes preserve untouched bytes and whole-file search finds a boundary-spanning match', async t => {
+  const file = path.join(await fixture(t), 'pages.log')
+  const prefix = Buffer.alloc(PAGE_SIZE - 4, 0x2e)
+  const suffix = Buffer.alloc(EDIT_LIMIT, 0x2e)
+  await fs.writeFile(file, Buffer.concat([prefix, Buffer.from('\r\nabcEND\n'), suffix]))
+  const before = await readLargePage(file, 'UTF-8')
+  assert.equal(before.readOnly, false)
+  const found = await searchLargeFile(file, before.encoding, before.fingerprint, {...emptyQuery, mode: 'extended', needle: '\\nabcEND'})
+  assert.equal(found.matches.length, 1)
+  assert.equal(found.matches[0].page, 0)
+  assert.equal(found.matches[0].crossesPage, true)
+  await saveLargePage(file, {...before, text: `START${before.text.slice(5)}`}, before.fingerprint)
+  const bytes = await fs.readFile(file)
+  assert.equal(bytes.subarray(0, 5).toString(), 'START')
+  assert.deepEqual(bytes.subarray(5, PAGE_SIZE - 4), prefix.subarray(5))
+  assert.equal(bytes.subarray(PAGE_SIZE - 4, PAGE_SIZE + 5).toString(), '\r\nabcEND\n')
+  assert.ok(bytes.subarray(PAGE_SIZE + 5).equals(suffix))
+  await assert.rejects(saveLargePage(file, before, before.fingerprint), /changed on disk/)
 })
 
 test('F12 JSON formatting preserves raw numeric and string literals and duplicate keys', () => {

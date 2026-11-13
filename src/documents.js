@@ -1,6 +1,6 @@
 import {newlines} from '../shared/text.mjs'
 
-export const defaults = {theme: 'dark', tabSize: 2, fontSize: 15, numbers: true, spaces: true, whitespace: false, wrap: false, backup: false, autocomplete: true, indentGuides: true, recover: true, shortcuts: {}, languages: [], tools: [], rtl: false}
+export const defaults = {theme: 'system', tabSize: 2, fontSize: 15, numbers: true, spaces: true, whitespace: false, wrap: false, backup: false, autocomplete: true, indentGuides: true, recover: true, shortcuts: {}, languages: [], tools: [], rtl: false, newEncoding: 'UTF-8', newEol: 'LF'}
 
 const samples = {
   'workspace.json': `{
@@ -28,7 +28,7 @@ const samples = {
 }
 `,
   'welcome.md': `# Welcome to Margin\n\nA workbench for local text and code.\n\n- Open a file or a folder from the toolbar.\n- Use **Find** to search the current document.\n- Use **Find in Files** to preview changes across a folder.\n- Open the **Command Palette** to find any command.\n\nThis sample is editable. Save a copy to keep your changes.\n`,
-  'notes.txt': 'Field notes\n\nOpen a folder to start exploring.\nChoose an encoding or line ending from the status bar.\n',
+  'notes.txt': 'Release notes\n\n- Verify offline installers\n- Review search results\n- Save workspace notes\n',
 }
 
 export function documentFor(name, text = '', extra = {}) {
