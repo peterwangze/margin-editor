@@ -18,30 +18,15 @@ const profile = path.join(temp, 'profile')
 await fs.mkdir(profile)
 const file = path.join(temp, 'offline.txt')
 await fs.writeFile(file, 'original\r\n')
-const server = createServer()
-server.listen(0, '127.0.0.1')
-await once(server, 'listening')
-const {port} = server.address()
-await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
-const child = spawn(executable, [
-  `--remote-debugging-port=${port}`,
-  '--disable-background-networking',
-  '--proxy-server=http://127.0.0.1:9',
-  '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost',
-  file,
-], {
-  env: {...process.env, MARGIN_PROFILE: profile, HTTPS_PROXY: 'http://127.0.0.1:9', HTTP_PROXY: 'http://127.0.0.1:9', NO_PROXY: 'localhost,127.0.0.1'},
-  stdio: ['ignore', 'pipe', 'pipe'],
-  detached: process.platform !== 'win32',
-})
-const exited = once(child, 'exit').catch(() => {})
+let child
+let exited
 let output = ''
-let launchError
-child.on('error', error => { launchError = error })
-for (const pipe of [child.stdout, child.stderr]) pipe.on('data', data => { output = (output + data).slice(-10000) })
+let browser
+let page
+const pageErrors = []
 
 function stopApplication(force = false) {
-  if (child.exitCode !== null || child.signalCode !== null || !child.pid) return
+  if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return
   try {
     if (process.platform === 'win32') {
       execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {windowsHide: true, stdio: 'ignore', timeout: 7000})
@@ -53,16 +38,36 @@ function stopApplication(force = false) {
   }
 }
 
-const watchdog = setTimeout(() => {
-  stopApplication(true)
-  console.error(`Packaged application validation timed out.\n${output}`)
-  process.exit(1)
-}, 75000)
-const address = `http://127.0.0.1:${port}`
-let browser
-let page
-try {
+async function launch() {
+  const server = createServer()
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const {port} = server.address()
+  await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+  const address = `http://127.0.0.1:${port}`
   console.log(`Launching ${packageForm} on ${process.platform}/${process.arch}`)
+  let launchError
+  child = spawn(executable, [
+    `--remote-debugging-port=${port}`,
+    '--disable-background-networking',
+    '--proxy-server=http://127.0.0.1:9',
+    '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost',
+    file,
+  ], {
+    env: {
+      ...process.env,
+      MARGIN_PROFILE: profile,
+      MARGIN_TEST_LOCALE: 'zh-CN',
+      HTTPS_PROXY: 'http://127.0.0.1:9',
+      HTTP_PROXY: 'http://127.0.0.1:9',
+      NO_PROXY: 'localhost,127.0.0.1',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
+  })
+  exited = once(child, 'exit').catch(() => {})
+  child.on('error', error => { launchError = error })
+  for (const pipe of [child.stdout, child.stderr]) pipe.on('data', data => { output = (output + data).slice(-10000) })
   for (let n = 0; n < 100; n++) {
     if (launchError) throw launchError
     if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Margin exited with ${child.exitCode ?? child.signalCode}`)
@@ -75,9 +80,92 @@ try {
   await context.route(/^https?:/, route => route.abort())
   page = context.pages()[0] ?? await context.waitForEvent('page', {timeout: 7000})
   page.setDefaultTimeout(7000)
-  const pageErrors = []
   page.on('pageerror', error => pageErrors.push(error.message))
   await page.setViewportSize({width: 1024, height: 720})
+}
+
+async function shutdown() {
+  // Electron may defer SIGTERM while its renderer saves a recovery snapshot.
+  stopApplication()
+  if (child?.pid) {
+    const done = exited.then(() => true)
+    if (!await Promise.race([done, delay(1500, false, {ref: false})])) {
+      stopApplication(true)
+      assert.ok(await Promise.race([done, delay(3000, false, {ref: false})]), 'Could not stop the packaged application')
+    }
+  }
+  if (browser) await Promise.race([browser.close().catch(() => {}), delay(1000, undefined, {ref: false})])
+  child = undefined
+  browser = undefined
+  page = undefined
+}
+
+async function openLanguageSettings(chinese) {
+  await page.getByRole('button', {name: chinese ? '设置' : 'Settings', exact: true}).click()
+  await page.getByRole('button', {name: chinese ? /^首选项…/ : /^Preferences…/}).click()
+  const settings = page.getByRole('dialog', {name: chinese ? '设置' : 'Settings', exact: true})
+  return settings.getByRole('combobox', {name: chinese ? '界面语言' : 'Interface language', exact: true})
+}
+
+const watchdog = setTimeout(() => {
+  stopApplication(true)
+  console.error(`Packaged application validation timed out.\n${output}`)
+  process.exit(1)
+}, 150000)
+
+try {
+  await launch()
+  const html = page.locator('html')
+  const chineseEditor = page.getByRole('textbox', {name: '文档编辑器'})
+  const chineseFile = page.getByRole('button', {name: '文件', exact: true})
+  const englishFile = page.getByRole('button', {name: 'File', exact: true})
+  await expect(html).toHaveAttribute('lang', 'zh-CN')
+  await expect(chineseFile).toBeVisible()
+  await expect(chineseEditor).toHaveText('original')
+  await chineseEditor.focus()
+  await page.keyboard.press('Home')
+  await page.keyboard.insertText('未保存的草稿 ')
+  const chinesePreference = await openLanguageSettings(true)
+  await expect(chinesePreference).toHaveValue('system')
+  await expect(chinesePreference.locator('option[value="system"]')).toHaveText('跟随系统')
+  await expect(chinesePreference.locator('option[value="en"]')).toHaveText('English')
+  await expect(chinesePreference.locator('option[value="zh-CN"]')).toHaveText('简体中文')
+  await page.evaluate(() => document.fonts.ready)
+  await page.screenshot({path: path.join(evidence, `${packageForm}-language.png`), animations: 'disabled'})
+  await page.setViewportSize({width: 650, height: 540})
+  const settingsDialog = page.getByRole('dialog', {name: '设置', exact: true})
+  assert.equal(await settingsDialog.evaluate(element => element.scrollWidth - element.clientWidth), 0, 'Chinese settings fit a narrow window')
+  await page.setViewportSize({width: 1024, height: 720})
+
+  await chinesePreference.focus()
+  await chinesePreference.selectOption('en')
+  const englishPreference = page.getByRole('combobox', {name: 'Interface language', exact: true})
+  await expect(html).toHaveAttribute('lang', 'en')
+  await expect(englishPreference).toHaveValue('en')
+  await expect(englishPreference).toBeFocused()
+  await englishPreference.selectOption('zh-CN')
+  await expect(html).toHaveAttribute('lang', 'zh-CN')
+  await expect(chinesePreference).toHaveValue('zh-CN')
+  await expect(chinesePreference).toBeFocused()
+  await chinesePreference.selectOption('system')
+  await expect(html).toHaveAttribute('lang', 'zh-CN')
+  await expect(chinesePreference).toHaveValue('system')
+  await page.keyboard.press('Escape')
+  await expect(chineseEditor).toHaveText('未保存的草稿 original')
+  const chineseToolbar = page.getByRole('toolbar', {name: '编辑工具栏'})
+  await chineseToolbar.getByRole('button', {name: '撤销', exact: true}).click()
+  await expect(chineseEditor).toHaveText('original')
+  await chineseToolbar.getByRole('button', {name: '替换', exact: true}).click()
+  const chineseFind = page.getByRole('region', {name: '查找与替换'})
+  await chineseFind.getByRole('textbox', {name: '查找', exact: true}).fill('original')
+  await expect(chineseFind.getByRole('status')).toHaveText('第 1 项，共 1 项')
+  await page.screenshot({path: path.join(evidence, `${packageForm}-chinese.png`), animations: 'disabled'})
+  await chineseFind.getByRole('button', {name: '关闭查找栏'}).click()
+  await (await openLanguageSettings(true)).selectOption('en')
+  await expect(englishPreference).toHaveValue('en')
+  await page.keyboard.press('Escape')
+  await expect(englishFile).toBeVisible()
+
   const menu = page.getByRole('navigation', {name: 'Application menus'})
   const toolbar = page.getByRole('toolbar', {name: 'Editor toolbar'})
   const editor = page.getByRole('textbox', {name: 'Document editor'})
@@ -147,31 +235,32 @@ try {
   await toolbar.getByRole('button', {name: 'Save', exact: true}).click()
   await expect(page.getByText('Saved offline.txt', {exact: true})).toBeVisible()
   assert.equal(await fs.readFile(file, 'utf8'), 'local edit\r\n中🙂\r\ncopy this')
+
+  await shutdown()
+  await launch()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  await expect(page.getByRole('button', {name: 'File', exact: true})).toBeVisible()
+  await expect(page.locator('.cm-line')).toHaveText(['local edit', '中🙂', 'copy this'])
+  const remembered = await openLanguageSettings(false)
+  await expect(remembered).toHaveValue('en')
+  await remembered.selectOption('system')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+  await expect(page.getByRole('combobox', {name: '界面语言', exact: true})).toHaveValue('system')
   assert.deepEqual(pageErrors, [])
   await fs.writeFile(path.join(evidence, `${packageForm}.json`), JSON.stringify({
     platform: process.platform,
     arch: process.arch,
     packageForm,
     offline: 'Chromium used a loopback-only proxy and renderer HTTP(S) requests were blocked',
-    passed: ['desktop layout', 'narrow window', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'CRLF save', 'find and replace', 'inspect and clean', 'undo and redo', 'disk byte verification'],
+    passed: ['desktop layout', 'narrow window', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'CRLF save', 'find and replace', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence'],
   }, null, 2) + '\n')
-  console.log(`${packageForm}: layout, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup and undo passed`)
+  console.log(`${packageForm}: layout, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup, undo and interface language persistence passed`)
 } catch (error) {
   await page?.screenshot({path: path.join(evidence, `${packageForm}-failed.png`)}).catch(() => {})
   console.error(output)
   throw error
 } finally {
-  // Electron may defer SIGTERM while its renderer saves a recovery snapshot.
-  // Bound cleanup independently of the DevTools connection and all app helpers.
-  stopApplication()
-  if (child.pid) {
-    const done = exited.then(() => true)
-    if (!await Promise.race([done, delay(1500, false, {ref: false})])) {
-      stopApplication(true)
-      assert.ok(await Promise.race([done, delay(3000, false, {ref: false})]), 'Could not stop the packaged application')
-    }
-  }
-  if (browser) await Promise.race([browser.close().catch(() => {}), delay(1000, undefined, {ref: false})])
+  await shutdown()
   await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
   clearTimeout(watchdog)
 }

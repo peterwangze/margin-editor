@@ -36,6 +36,23 @@ export function documentFor(name, text = '', extra = {}) {
   return {id: crypto.randomUUID(), name, ...content, path: null, encoding: 'UTF-8', dirty: false, readOnly: false, bookmarks: [], ...extra}
 }
 
+export function untitledDocument(number, extra) {
+  return documentFor(`Untitled ${number}`, '', {...extra, untitledNumber: number})
+}
+
+export function documentTitle(doc, t) {
+  if (doc.path) return doc.name
+  if (doc.untitledNumber) return t('Untitled {number}', {number: doc.untitledNumber})
+  if (doc.recoveredName !== undefined) return t('{name} (recovered)', {name: doc.recoveredName || t('Untitled')})
+  return doc.name
+}
+
+export function restoreDocumentTitle(doc) {
+  if (doc.path || doc.sample || doc.untitledNumber || doc.recoveredName !== undefined) return doc
+  const match = /^Untitled (\d+)$/.exec(doc.name)
+  return match ? {...doc, untitledNumber: Number(match[1])} : doc
+}
+
 export const demoDocuments = () => Object.entries(samples).map(([name, text]) => documentFor(name, text, {sample: true}))
 export const basename = path => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
 export const dirname = path => path.replace(/[\\/][^\\/]*$/, '')

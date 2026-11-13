@@ -9,6 +9,7 @@ import {languages} from '@codemirror/language-data'
 import {tags} from '@lezer/highlight'
 import {updateMixed} from '../shared/text.mjs'
 import {udlMode} from './notepad-udl'
+import {useLocale} from './i18n'
 
 export const syntax = syntaxHighlighting(HighlightStyle.define([
   {tag: [tags.propertyName, tags.keyword, tags.controlKeyword, tags.heading], color: 'var(--token-key)'},
@@ -69,9 +70,15 @@ const searchMarks = StateField.define({
 
 class Bookmark extends GutterMarker {
   elementClass = 'bookmark-gutter-mark'
-  toDOM() { const item = document.createElement('span'); item.textContent = '●'; item.title = 'Bookmark'; return item }
+  constructor(label) { super(); this.label = label }
+  eq(other) { return this.label === other.label }
+  toDOM() {
+    const item = document.createElement('span')
+    item.textContent = '●'
+    item.title = this.label
+    return item
+  }
 }
-const bookmark = new Bookmark()
 const bookmarkField = StateField.define({
   create: () => [],
   update(value, tr) {
@@ -80,8 +87,14 @@ const bookmarkField = StateField.define({
     return [...new Set(value.map(line => tr.newDoc.lineAt(tr.changes.mapPos(tr.startState.doc.line(Math.min(line, tr.startState.doc.lines)).from, 1)).number))]
   },
 })
-const bookmarksGutter = gutter({class: 'bookmark-gutter', lineMarker: (view, block) => view.state.field(bookmarkField).includes(view.state.doc.lineAt(block.from).number) ? bookmark : null,
-  lineMarkerChange: update => update.startState.field(bookmarkField) !== update.state.field(bookmarkField)})
+function bookmarksGutter(t) {
+  const bookmark = new Bookmark(t('Bookmark'))
+  return gutter({
+    class: 'bookmark-gutter',
+    lineMarker: (view, block) => view.state.field(bookmarkField).includes(view.state.doc.lineAt(block.from).number) ? bookmark : null,
+    lineMarkerChange: update => update.startState.field(bookmarkField) !== update.state.field(bookmarkField),
+  })
+}
 
 const overwrite = StateField.define({
   create: () => false,
@@ -119,8 +132,24 @@ function editorOptions(settings, doc) {
   return [settings.numbers ? lineNumbers() : [], highlightActiveLineGutter(), settings.whitespace && !large ? highlightWhitespace() : [],
     settings.wrap && !large ? EditorView.lineWrapping : [], EditorState.tabSize.of(settings.tabSize), indentUnit.of(settings.spaces ? ' '.repeat(settings.tabSize) : '\t'),
     EditorState.readOnly.of(doc.readOnly), EditorView.editable.of(!doc.readOnly),
-    EditorView.contentAttributes.of({dir: (doc.rtl ?? settings.rtl) ? 'rtl' : 'ltr', 'aria-label': 'Document editor', spellcheck: 'false'}),
+    EditorView.contentAttributes.of({dir: (doc.rtl ?? settings.rtl) ? 'rtl' : 'ltr', spellcheck: 'false'}),
     settings.autocomplete && !large ? autocompletion() : [], large ? [] : [foldGutter(), highlightSelectionMatches(), highlightSpecialChars(), bracketMatching(), closeBrackets(), indentOnInput()]]
+}
+
+const editorPhrases = [
+  'Completions', 'Control character', 'Selection deleted', 'Folded lines', 'Unfolded lines',
+  'to', 'folded code', 'unfold', 'Fold line', 'Unfold line', 'Go to line', 'go',
+  'replaced match on line $', 'replaced $ matches', 'Find', 'Replace', 'next', 'previous', 'all',
+  'match case', 'regexp', 'by word', 'replace', 'replace all', 'close', 'current match', 'on line',
+]
+
+function editorInterface(t) {
+  return [
+    EditorState.phrases.of(Object.fromEntries(editorPhrases.map(phrase => [phrase, t(phrase)]))),
+    EditorView.contentAttributes.of({'aria-label': t('Document editor')}),
+    placeholder(t('Start typing…')),
+    bookmarksGutter(t),
+  ]
 }
 
 export function markSearch(view, matches, active) {
@@ -151,21 +180,22 @@ export function goTo(view, line, col = 1) {
 }
 
 export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, activate, onScroll, matches, matchIndex}) {
+  const {t} = useLocale()
   const host = useRef(null)
   const cache = useRef(new Map())
   const viewRef = useRef(null)
   const current = useRef({})
-  const compartments = useRef({mode: new Compartment(), options: new Compartment()})
+  const compartments = useRef({mode: new Compartment(), options: new Compartment(), interface: new Compartment()})
   current.current = {doc, attach, onEdit, onCursor, activate, onScroll}
 
   useLayoutEffect(() => {
-    const {mode, options} = compartments.current
+    const {mode, options, interface: interfaceText} = compartments.current
     const saved = cache.current.get(doc.id)
     const position = doc.positions?.[slot]
     const clamp = value => Math.min(value ?? 0, doc.text.length)
     const base = saved?.epoch === doc.epoch && saved?.state.doc.toString() === doc.text ? saved.state : EditorState.create({doc: doc.text, selection: {anchor: clamp(position?.anchor ?? doc.cursor), head: clamp(position?.head ?? doc.cursor)}, extensions: [
-      history(), rememberFormat, formatField.init(() => ({eol: doc.eol, mixed: doc.mixed, version: doc.formatVersion ?? 0})), drawSelection(), dropCursor(), rectangularSelection(), crosshairCursor(), highlightActiveLine(), syntax, searchMarks, bookmarkField, bookmarksGutter, overwrite, overwriteInput,
-      placeholder('Start typing…'), EditorState.allowMultipleSelections.of(true), mode.of([]), options.of(editorOptions(settings, doc)),
+      history(), rememberFormat, formatField.init(() => ({eol: doc.eol, mixed: doc.mixed, version: doc.formatVersion ?? 0})), drawSelection(), dropCursor(), rectangularSelection(), crosshairCursor(), highlightActiveLine(), syntax, searchMarks, bookmarkField, overwrite, overwriteInput,
+      interfaceText.of(editorInterface(t)), EditorState.allowMultipleSelections.of(true), mode.of([]), options.of(editorOptions(settings, doc)),
       keymap.of([indentWithTab, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...foldKeymap, ...completionKeymap]),
       EditorView.updateListener.of(update => {
         const props = current.current
@@ -205,6 +235,10 @@ export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, ac
     view.dispatch({effects: compartments.current.options.reconfigure(editorOptions(settings, doc))})
   }, [doc.id, doc.epoch, doc.readOnly, doc.rtl, doc.size, settings])
 
+  useLayoutEffect(() => {
+    viewRef.current?.dispatch({effects: compartments.current.interface.reconfigure(editorInterface(t))})
+  }, [doc.id, doc.epoch, t])
+
   useEffect(() => {
     const view = viewRef.current
     let alive = true
@@ -240,7 +274,7 @@ export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, ac
   useEffect(() => { setEditorBookmarks(viewRef.current, doc.bookmarks) }, [doc.id, doc.bookmarks])
   useEffect(() => { markSearch(viewRef.current, matches, matchIndex) }, [doc.id, doc.epoch, matches, matchIndex])
 
-  return <div ref={host} className="editor-surface" onFocusCapture={() => activate(slot)} aria-label={`Editor pane ${slot === 'main' ? 1 : 2}`} />
+  return <div ref={host} className="editor-surface" onFocusCapture={() => activate(slot)} aria-label={t('Editor pane {number}', {number: slot === 'main' ? 1 : 2})} />
 }
 
 export function insertAtSelections(view, transform) {

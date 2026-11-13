@@ -13,6 +13,7 @@ Open Margin and start typing. The menu, toolbar, and document tabs keep common a
 ## Edit and check your text
 
 - **Write a note or tidy a list.** Start in a blank document, drag in files, or split the view to read two places at once. Sort lines, remove duplicates, and use rectangular selections or multiple cursors for repeated edits.
+- **Use English or Simplified Chinese.** Margin follows your system language by default. Open **Settings → Preferences → Interface language** to switch immediately. The app remembers your choice after a restart.
 - **Inspect text copied from elsewhere.** Open **Edit → Inspect & clean text** or click the length in the status bar. Count words and graphemes in the document, selection, or loaded page. Choose whether to trim trailing spaces and tabs, convert nonbreaking spaces, or remove zero-width spaces. Preview up to six changed lines and undo the cleanup in one step.
 - **Keep file formats under your control.** Reopen with a different encoding or explicitly convert on save. Reopening a Unicode file keeps its byte-order mark (BOM) setting. See line endings in the status bar and choose when to standardize a mixed file. Use **Save a copy** to write to a separate file.
 - **Pick up an interrupted edit.** Compare external disk changes before saving. Session recovery restores the last completed local snapshot. With recovery turned off, quitting with unsaved changes offers **Save All**, **Discard Changes**, and **Cancel**.
@@ -24,6 +25,8 @@ Open Margin and start typing. The menu, toolbar, and document tabs keep common a
 *Inspect the selected text, see what the cleanup changes, and keep editing before you save.*
 
 ![The docked Find and Replace bar leaves the document in view and highlights the current match.](docs/screenshots/find.png)
+
+![Margin's Simplified Chinese settings with the interface language selector.](docs/screenshots/interface-language.png)
 
 ## Install offline
 

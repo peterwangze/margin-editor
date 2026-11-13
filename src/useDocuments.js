@@ -1,14 +1,16 @@
 import {useEffect, useRef, useState} from 'react'
-import {documentFor, defaults, basename, dirname, browserSession} from './documents'
+import {documentFor, documentTitle, restoreDocumentTitle, untitledDocument, defaults, basename, dirname, browserSession} from './documents'
 import {withNewlines} from '../shared/text.mjs'
 import {focusEditor} from './editor'
 import {fromScintillaPositions, notepadEncoding} from './notepad-session'
+import {useLocale, errorMessage} from './i18n'
 
 const sameContent = (before, after) => before.path === after.path && before.text === after.text &&
   before.encoding === after.encoding && before.eol === after.eol && before.mixed === after.mixed
 
 export function useDocuments(api, notify) {
-  const [docs, setDocs] = useState(() => [documentFor('Untitled 1')])
+  const {t} = useLocale()
+  const [docs, setDocs] = useState(() => [untitledDocument(1)])
   const docsRef = useRef(docs)
   const [main, setMain] = useState(docs[0].id)
   const [secondary, setSecondary] = useState(null)
@@ -31,6 +33,11 @@ export function useDocuments(api, notify) {
   const beforeClose = useRef(null)
   const closingTabs = useRef(false)
   const lastPersistError = useRef('')
+  const reportError = useRef(null)
+  reportError.current = (error, template) => {
+    const message = errorMessage(t, error)
+    notify(template ? t(template, {message}) : message)
+  }
 
   const active = (slot === 'secondary' && split ? secondary : main)
   const doc = docs.find(doc => doc.id === active) ?? docs[0]
@@ -80,7 +87,7 @@ export function useDocuments(api, notify) {
   function create() {
     let n = 1
     while (docsRef.current.some(doc => doc.name === `Untitled ${n}`)) n++
-    add(documentFor(`Untitled ${n}`, '', {encoding: settings.newEncoding, eol: settings.newEol}))
+    add(untitledDocument(n, {encoding: settings.newEncoding, eol: settings.newEol}))
   }
 
   const remember = path => setRecent(items => [path, ...items.filter(item => item !== path)].slice(0, 40))
@@ -90,7 +97,7 @@ export function useDocuments(api, notify) {
   }
 
   const pickFolder = async () => {
-    if (!api) { notify('Open the desktop app to browse a folder.'); return }
+    if (!api) { notify(t('Open the desktop app to browse a folder.')); return }
     const path = await api.pickFolder()
     if (path) { await setFolder(path); return true }
   }
@@ -99,19 +106,19 @@ export function useDocuments(api, notify) {
     if (!api) return
     const result = await api.open(path)
     if (result.directory) { await setFolder(result.directory); return }
-    if (result.binary && !result.large) throw new Error(`${result.name} contains NUL bytes and appears to be binary.`)
+    if (result.binary && !result.large) throw new Error(t('{name} contains NUL bytes and appears to be binary.', {name: result.name}))
     const existing = docsRef.current.find(doc => doc.path === result.path)
     const location = line ? {line, column} : undefined
     if (existing) focus(existing.id, slot, location)
     else add(documentFor(result.name, result.text, {...result, readOnly: Boolean(result.lossy || result.readOnly)}), location)
-    if (result.lossy && !result.large) notify('Opened read-only. Reopen with another encoding to edit the original bytes.')
+    if (result.lossy && !result.large) notify(t('Opened read-only. Reopen with another encoding to edit the original bytes.'))
     remember(result.path)
   }
 
   async function openPaths(paths) {
     for (const item of paths) {
       try { await openPath(item.path ?? item, item.line, item.column) }
-      catch (error) { notify(error.message) }
+      catch (error) { reportError.current(error) }
     }
   }
 
@@ -120,7 +127,7 @@ export function useDocuments(api, notify) {
     for (const file of files) add(documentFor(file.name, await file.text()))
   }
 
-  async function confirm(message, detail, buttons = ['Continue', 'Cancel']) {
+  async function confirm(message, detail, buttons = [t('Continue'), t('Cancel')]) {
     if (api) return api.confirm(message, detail, buttons)
     return window.confirm(`${message}\n\n${detail}`) ? 0 : buttons.length - 1
   }
@@ -137,20 +144,20 @@ export function useDocuments(api, notify) {
         const a = document.createElement('a'); a.href = uri; a.download = doc.name; a.click()
         setTimeout(() => URL.revokeObjectURL(uri), 1000)
         if (kind !== 'copy') amend(id, item => ({dirty: item.text !== doc.text, savedText: doc.text}))
-        notify('Downloaded ' + doc.name)
+        notify(t('Downloaded {name}', {name: doc.name}))
         return true
       }
       let file = doc.path
       let expected = doc.fingerprint
       if (!file || kind !== 'normal') {
-        file = await api.saveDialog(doc.path ?? doc.name)
+        file = await api.saveDialog(doc.path ?? documentTitle(doc, t))
         if (!file) return false
         if (kind === 'copy' && file === doc.path) throw new Error('Choose a different file for the copy.')
         if (docsRef.current.some(item => item.id !== id && item.path === file)) throw new Error('That file is already open in another tab.')
         expected = file === doc.path ? doc.fingerprint : 'confirmed-dialog'
       } else if (doc.lossy) throw new Error('Reopen with the correct encoding before saving this file.')
       if (doc.lossy) throw new Error('Reopen with the correct encoding before saving a copy.')
-      if (kind === 'normal' && file === doc.path && !doc.dirty) { notify(`${doc.name} is already saved.`); return true }
+      if (kind === 'normal' && file === doc.path && !doc.dirty) { notify(t('{name} is already saved.', {name: doc.name})); return true }
       if (doc.large) amend(id, {readOnly: true})
       const info = await api.save(file, {text: doc.text, encoding: doc.encoding, eol: doc.eol, mixed: doc.mixed, large: doc.large}, expected, settings.backup)
       if (doc.large) amend(id, item => ({...info, large: info.large ?? null, dirty: false, external: null, readOnly: Boolean(info.readOnly || info.lossy),
@@ -161,7 +168,7 @@ export function useDocuments(api, notify) {
       if (workspace && dirname(info.path) === workspace) {
         try { setEntries(await api.entries(workspace)) } catch {}
       }
-      notify(`Saved ${info.name}`)
+      notify(t('Saved {name}', {name: info.name}))
       return true
     } catch (error) { if (doc.large) amend(id, {readOnly: doc.readOnly}); throw error }
     finally { saving.current.delete(id) }
@@ -169,23 +176,23 @@ export function useDocuments(api, notify) {
 
   async function reload(doc, encoding, force = false) {
     if (!doc?.path) return
-    if (saving.current.has(doc.id)) { notify('Wait for the current save before reloading.'); return }
-    if (doc.dirty && !force && await confirm('Discard unsaved changes?', doc.name, ['Reload', 'Cancel']) !== 0) return
+    if (saving.current.has(doc.id)) { notify(t('Wait for the current save before reloading.')); return }
+    if (doc.dirty && !force && await confirm(t('Discard unsaved changes?'), documentTitle(doc, t), [t('Reload'), t('Cancel')]) !== 0) return
     const result = await api.open(doc.path, encoding)
     const latest = docsRef.current.find(item => item.id === doc.id)
     if (!latest || !sameContent(doc, latest) || latest.dirty !== doc.dirty || saving.current.has(doc.id)) {
-      notify('The document changed during reload. Your edits are still open.')
+      notify(t('The document changed during reload. Your edits are still open.'))
       return
     }
     if (result.binary && !result.large) throw new Error('That encoding produced NUL bytes. Choose another encoding.')
     amend(doc.id, item => ({...result, positions: undefined, epoch: (item.epoch ?? 0) + 1, large: result.large ?? null, savedText: result.text, savedFormat: [result.encoding, result.eol, result.mixed], dirty: false, external: null, readOnly: Boolean(result.lossy || result.readOnly)}))
-    if (result.lossy && !result.large) notify('This encoding could not decode the file losslessly. Opened read-only.')
+    if (result.lossy && !result.large) notify(t('This encoding could not decode the file losslessly. Opened read-only.'))
   }
 
   async function readPage(doc, index, selection) {
     const current = docsRef.current.find(item => item.id === doc?.id)
     if (!current?.large || saving.current.has(current.id)) return
-    if (current.dirty) { notify('Save this page before opening another page.'); return }
+    if (current.dirty) { notify(t('Save this page before opening another page.')); return }
     const result = await api.largePage(current.path, current.encoding, index)
     const latest = docsRef.current.find(item => item.id === current.id)
     if (latest !== current) return
@@ -201,26 +208,26 @@ export function useDocuments(api, notify) {
     closingTabs.current = true
     try {
       for (const id of ids) {
-        if (saving.current.has(id)) { notify('Wait for the current save before closing.'); return }
+        if (saving.current.has(id)) { notify(t('Wait for the current save before closing.')); return }
         const doc = docsRef.current.find(item => item.id === id)
         if (!doc) continue
         if (doc.dirty) {
-          const options = api ? ['Save', 'Discard', 'Cancel'] : ['Discard', 'Cancel']
-          const choice = await confirm(`Save changes to ${doc.name}?`, 'Unsaved changes will be removed from this session if you discard them.', options)
+          const options = (api ? ['Save', 'Discard', 'Cancel'] : ['Discard', 'Cancel']).map(label => t(label))
+          const choice = await confirm(t('Save changes to {name}?', {name: documentTitle(doc, t)}), t('Unsaved changes will be removed from this session if you discard them.'), options)
           if (choice === options.length - 1) return
           const shouldSave = api && choice === 0
           if (shouldSave && !await save(id)) return
           const latest = docsRef.current.find(item => item.id === id)
           if (!latest) continue
           if (saving.current.has(id) || latest.dirty && (shouldSave || !sameContent(doc, latest))) {
-            notify('The document changed while closing. Your edits are still open.')
+            notify(t('The document changed while closing. Your edits are still open.'))
             return
           }
         }
         const before = docsRef.current
         const index = before.findIndex(item => item.id === id)
         const next = before.filter(item => item.id !== id)
-        if (!next.length) next.push(documentFor('Untitled 1', '', {encoding: settings.newEncoding, eol: settings.newEol}))
+        if (!next.length) next.push(untitledDocument(1, {encoding: settings.newEncoding, eol: settings.newEol}))
         const fallback = next[Math.min(index, next.length - 1)].id
         const saved = before[index]
         closed.current = [{...saved, dirty: false}, ...closed.current].slice(0, 20)
@@ -257,7 +264,9 @@ export function useDocuments(api, notify) {
 
   function applySession(value) {
     if (!value || value.version !== 1) return
-    const restored = Array.isArray(value.docs) ? value.docs.filter(doc => typeof doc.id === 'string' && typeof doc.name === 'string' && typeof doc.text === 'string') : []
+    const restored = Array.isArray(value.docs) ? value.docs
+      .filter(doc => typeof doc.id === 'string' && typeof doc.name === 'string' && typeof doc.text === 'string')
+      .map(restoreDocumentTitle) : []
     if (value.settings && typeof value.settings === 'object') setSettings({...defaults, ...value.settings})
     if (Array.isArray(value.macros)) setMacros(value.macros)
     if (Array.isArray(value.recent)) setRecent(value.recent)
@@ -292,14 +301,15 @@ export function useDocuments(api, notify) {
         const original = await open(item.filename, format)
         const backup = await open(item.backup)
         const usableBackup = backup && !backup.lossy && !backup.large ? backup : null
-        if (!original && !usableBackup) { viewIds[index].push(null); skipped.push(item.filename || '(unnamed)'); continue }
+        if (!original && !usableBackup) { viewIds[index].push(null); skipped.push(item.filename || t('(unnamed)')); continue }
         const existing = original && (opened.get(original.path) ?? docsRef.current.find(value => value.path === original.path))
         const readOnly = Boolean(item.readOnly || original?.lossy || original?.readOnly)
         const language = findLanguage(item.language)
         if (usableBackup && (usableBackup.text !== original?.text || !original) && (!existing || usableBackup.text !== existing.text)) {
-          const name = `${basename(item.filename) || 'Untitled'} (recovered)`
-          doc = documentFor(name, usableBackup.text, {dirty: true, eol: usableBackup.eol, mixed: usableBackup.mixed, encoding: original?.encoding ?? usableBackup.encoding, readOnly: false})
-          recovered.push(name)
+          const recoveredName = basename(item.filename)
+          const name = `${recoveredName || 'Untitled'} (recovered)`
+          doc = documentFor(name, usableBackup.text, {dirty: true, recoveredName, eol: usableBackup.eol, mixed: usableBackup.mixed, encoding: original?.encoding ?? usableBackup.encoding, readOnly: false})
+          recovered.push(documentTitle(doc, t))
         } else if (existing) doc = {...existing}
         else doc = documentFor(original.name, original.text, {...original, readOnly})
         const lineCount = item.bookmarks.length ? doc.text.split('\n').length : Infinity
@@ -342,22 +352,22 @@ export function useDocuments(api, notify) {
   }
   beforeClose.current = async () => {
     if (saving.current.size || closingTabs.current) {
-      notify('Finish saving or closing documents before quitting.')
+      notify(t('Finish saving or closing documents before quitting.'))
       return false
     }
     if (!snapshot.current().settings.recover) {
       const dirty = docsRef.current.filter(doc => doc.dirty)
       if (dirty.length) {
-        const choice = await confirm('Quit with unsaved documents?', 'Session recovery is off. Save your changes before quitting or discard them.', ['Save All', 'Discard Changes', 'Cancel'])
+        const choice = await confirm(t('Quit with unsaved documents?'), t('Session recovery is off. Save your changes before quitting or discard them.'), [t('Save All'), t('Discard Changes'), t('Cancel')])
         if (choice === 2) return false
         if (choice === 0) {
           for (const doc of dirty) if (!await save(doc.id)) return false
           if (docsRef.current.some(doc => doc.dirty)) {
-            notify('Some documents changed while saving. Your edits are still open.')
+            notify(t('Some documents changed while saving. Your edits are still open.'))
             return false
           }
         } else if (docsRef.current.some(doc => doc.dirty && !dirty.some(item => item.id === doc.id && sameContent(item, doc)))) {
-          notify('Documents changed while quitting. Your edits are still open.')
+          notify(t('Documents changed while quitting. Your edits are still open.'))
           return false
         }
       }
@@ -365,7 +375,7 @@ export function useDocuments(api, notify) {
     const documents = docsRef.current
     await persist()
     if (saving.current.size || docsRef.current.some(doc => doc.dirty && !documents.some(item => item.id === doc.id && sameContent(item, doc)))) {
-      notify('Documents changed while quitting. Your edits are still open.')
+      notify(t('Documents changed while quitting. Your edits are still open.'))
       return false
     }
     return true
@@ -376,7 +386,7 @@ export function useDocuments(api, notify) {
     let unsubscribe
     async function start() {
       try { const value = api ? await api.loadSession() : browserSession(); if (live) applySession(value) }
-      catch (error) { notify(`Session recovery failed: ${error.message}`) }
+      catch (error) { reportError.current(error, 'Session recovery failed: {message}') }
       if (!live) return
       setReady(true)
       if (api) {
@@ -385,11 +395,11 @@ export function useDocuments(api, notify) {
         if (live) await openRequests.current(paths)
       }
     }
-    start().catch(error => notify(error.message))
+    start().catch(error => reportError.current(error))
     const close = api?.onBeforeClose(async () => {
       try {
         await api.closeReply(await beforeClose.current())
-      } catch (error) { notify(error.message); await api.closeReply(false) }
+      } catch (error) { reportError.current(error); await api.closeReply(false) }
     })
     const unload = () => { if (!api) { try { persist() } catch {} } }
     window.addEventListener('beforeunload', unload)
@@ -400,7 +410,7 @@ export function useDocuments(api, notify) {
     if (!ready) return
     const timer = setTimeout(async () => {
       try { await persist(); lastPersistError.current = '' }
-      catch (error) { if (lastPersistError.current !== error.message) notify(`Recovery snapshot: ${error.message}`); lastPersistError.current = error.message }
+      catch (error) { if (lastPersistError.current !== error.message) reportError.current(error, 'Recovery snapshot: {message}'); lastPersistError.current = error.message }
     }, 425)
     return () => clearTimeout(timer)
   }, [ready, docs, main, secondary, split, workspace, settings, recent, macros])

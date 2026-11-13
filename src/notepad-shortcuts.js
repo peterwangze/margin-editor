@@ -17,7 +17,7 @@ function readKey(node) {
   return [node.getAttribute('Ctrl') === 'yes' && 'Mod', node.getAttribute('Alt') === 'yes' && 'Alt', node.getAttribute('Shift') === 'yes' && 'Shift', key].filter(Boolean).join('+')
 }
 
-export function readNotepadShortcuts(text, current, definitions) {
+export function readNotepadShortcuts(text, current, definitions, t) {
   const xml = new DOMParser().parseFromString(text, 'application/xml')
   const root = xml.querySelector('NotepadPlus > InternalCommands')
   if (xml.querySelector('parsererror') || !root) throw new Error('Choose a valid Notepad++ shortcuts.xml file.')
@@ -27,15 +27,18 @@ export function readNotepadShortcuts(text, current, definitions) {
   for (const node of root.querySelectorAll(':scope > Shortcut')) {
     const id = commands.get(node.getAttribute('id'))
     const key = readKey(node)
-    if (!id || key === undefined) { skipped.push(`Command ${node.getAttribute('id') ?? '?'}`); continue }
+    if (!id || key === undefined) { skipped.push(t('Command {id}', {id: node.getAttribute('id') ?? '?'})); continue }
     const conflict = Object.keys(definitions).find(other => other !== id && (settings[other] ?? definitions[other][1]) === key)
-    if (key && conflict) { skipped.push(`${definitions[id][0]} · ${key} is used by ${definitions[conflict][0]}`); continue }
+    if (key && conflict) {
+      skipped.push(t('{command} · {key} is used by {conflict}', {command: t(definitions[id][0]), key, conflict: t(definitions[conflict][0])}))
+      continue
+    }
     settings[id] = key
     count++
   }
   for (const group of ['Macros', 'UserDefinedCommands', 'PluginCommands', 'ScintillaKeys']) {
     const nodes = xml.querySelector(`NotepadPlus > ${group}`)
-    if (nodes?.children.length) skipped.push(`${group} (${nodes.children.length} entries)`)
+    if (nodes?.children.length) skipped.push(t('{group} ({count} entries)', {group, count: nodes.children.length}))
   }
   return {settings, count, skipped}
 }

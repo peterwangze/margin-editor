@@ -10,7 +10,8 @@ import {EditorSurface, goTo, isOverwrite, modeFor, syncEditor} from './editor'
 import {useDocuments} from './useDocuments'
 import {useFind} from './useFind'
 import {useCommands} from './useCommands'
-import {documentFor, symbolsFor} from './documents'
+import {documentFor, documentTitle, symbolsFor} from './documents'
+import {errorMessage, loadInterfaceLanguage, LocaleProvider, useLocale} from './i18n'
 import {definitions, eventShortcut, menus} from './commands'
 import {readNotepadPreferences, readNotepadSession} from './notepad-session'
 import {readNotepadShortcuts} from './notepad-shortcuts'
@@ -36,6 +37,7 @@ function download(name, content) {
 }
 
 function App() {
+  const {t, formatNumber} = useLocale()
   const [notice, setNotice] = useState(null)
   const noticeTimer = useRef(null)
   const notify = message => { setNotice(String(message)); clearTimeout(noticeTimer.current); noticeTimer.current = setTimeout(() => setNotice(null), 4300) }
@@ -69,8 +71,8 @@ function App() {
   const changeSettings = data => m.setSettings({...m.settings, ...data})
   const setTheme = () => changeSettings({theme: light ? 'dark' : 'light'})
   const safe = callback => {
-    try { return Promise.resolve(callback()).catch(error => notify(error.message)) }
-    catch (error) { notify(error.message) }
+    try { return Promise.resolve(callback()).catch(error => notify(errorMessage(t, error))) }
+    catch (error) { notify(errorMessage(t, error)) }
   }
   const pickImport = type => { importType.current = type; importInput.current?.click() }
 
@@ -86,16 +88,16 @@ function App() {
       return
     }
     if (importType.current === 'notepad-shortcuts') {
-      const result = readNotepadShortcuts(text, m.settings.shortcuts, definitions)
+      const result = readNotepadShortcuts(text, m.settings.shortcuts, definitions, t)
       m.setSettings(current => ({...current, shortcuts: result.settings}))
-      notify(`Imported ${result.count} shortcut${result.count === 1 ? '' : 's'} from Notepad++.`)
-      if (result.skipped.length) setOutput({title: 'Notepad++ shortcuts import', text: ['Skipped entries:', ...result.skipped].join('\n')})
+      notify(t(result.count === 1 ? 'Imported {count} shortcut from Notepad++.' : 'Imported {count} shortcuts from Notepad++.', {count: result.count}))
+      if (result.skipped.length) setOutput({title: t('Notepad++ shortcuts import'), text: [t('Skipped entries:'), ...result.skipped].join('\n')})
       return
     }
     if (importType.current === 'notepad-preferences') {
       const settings = readNotepadPreferences(text)
       m.setSettings(current => ({...current, ...settings}))
-      notify(`Imported ${Object.keys(settings).length} preferences from Notepad++.`)
+      notify(t('Imported {count} preferences from Notepad++.', {count: Object.keys(settings).length}))
       return
     }
     if (importType.current === 'notepad-session') {
@@ -105,7 +107,7 @@ function App() {
       const windowsPaths = session.views.some(view => view.files.some(item => /^[A-Z]:[\\/]/i.test(item.filename)))
       let remap = null
       if (api.platform !== 'win32' && windowsPaths) {
-        const choice = await m.confirm('Map Windows drive paths?', 'Choose the local directory that contains the copied drive contents.', ['Choose Folder', 'Skip Windows Paths', 'Cancel'])
+        const choice = await m.confirm(t('Map Windows drive paths?'), t('Choose the local directory that contains the copied drive contents.'), ['Choose Folder', 'Skip Windows Paths', 'Cancel'].map(label => t(label)))
         if (choice === 2) return
         if (choice === 0) { remap = await api.pickFolder(); if (!remap) return }
       }
@@ -115,25 +117,25 @@ function App() {
         return aliases[key] ?? [...languageNames, ...m.settings.languages.map(item => item.name)].find(value => value.toLowerCase() === key)
       }
       const result = await m.importNotepadSession(session, path, remap, findLanguage)
-      notify(`Imported ${result.count} document${result.count === 1 ? '' : 's'}.`)
-      if (result.skipped.length || result.recovered.length) setOutput({title: 'Notepad++ session import', text: [
-        ...(result.recovered.length ? ['Recovered as unsaved tabs:', ...result.recovered] : []),
-        ...(result.skipped.length ? ['Could not open:', ...result.skipped] : []),
+      notify(t(result.count === 1 ? 'Imported {count} document.' : 'Imported {count} documents.', {count: result.count}))
+      if (result.skipped.length || result.recovered.length) setOutput({title: t('Notepad++ session import'), text: [
+        ...(result.recovered.length ? [t('Recovered as unsaved tabs:'), ...result.recovered] : []),
+        ...(result.skipped.length ? [t('Could not open:'), ...result.skipped] : []),
       ].join('\n')})
       return
     }
     if (importType.current === 'session') {
       const data = JSON.parse(text)
       if (data.version !== 1 || !Array.isArray(data.docs)) throw new Error('This is not a Margin session file.')
-      if (m.docs.some(doc => doc.dirty) && await m.confirm('Replace the current session?', 'Unsaved documents will be replaced by the imported session.', ['Import', 'Cancel']) !== 0) return
+      if (m.docs.some(doc => doc.dirty) && await m.confirm(t('Replace the current session?'), t('Unsaved documents will be replaced by the imported session.'), [t('Import'), t('Cancel')]) !== 0) return
       const docs = data.docs.filter(doc => typeof doc.name === 'string' && typeof doc.text === 'string').map(doc => documentFor(doc.name, doc.text, {dirty: true, cursor: doc.cursor}))
       m.applySession({version: 1, docs})
-      notify(`Imported ${docs.length} documents.`)
+      notify(t('Imported {count} documents.', {count: docs.length}))
       return
     }
     const modes = readNotepadLanguages(text)
     changeSettings({languages: [...m.settings.languages.filter(item => !modes.some(mode => mode.name === item.name)), ...modes]})
-    notify(`Imported ${modes.length} language definition${modes.length === 1 ? '' : 's'}.`)
+    notify(t(modes.length === 1 ? 'Imported {count} language definition.' : 'Imported {count} language definitions.', {count: modes.length}))
   }
 
   const openDocumentsSearch = () => setDialog({kind: 'open-search'})
@@ -249,10 +251,30 @@ function App() {
   function viewPane(slot, id) {
     const doc = m.docs.find(item => item.id === id) ?? m.docs[0]
     const active = m.slot === slot
-    return <section className={`editor-pane ${active ? 'active-pane' : ''}`} aria-label={`${slot === 'main' ? 'Primary' : 'Secondary'} editor`}>
+    return <section className={`editor-pane ${active ? 'active-pane' : ''}`} aria-label={t(slot === 'main' ? 'Primary editor' : 'Secondary editor')}>
       <Tabs docs={m.docs} active={doc.id} focus={id => m.focus(id, slot)} close={id => safe(() => m.close([id]))} add={() => invoke('new')} reorder={m.reorder} context={(doc, x, y) => setContext({doc, x, y})} pane={slot} />
-      {active && doc.external && <div className="conflict" role="alert"><AlertTriangle size={15} /><span>{doc.external.missing ? 'File moved or removed on disk.' : 'File changed on disk.'}</span>{!doc.external.error && <>{!doc.large && <button className="outline-button" onClick={() => safe(compareDisk)}>Compare</button>}<button className="outline-button" onClick={() => invoke('reload')}>Reload</button></>}{!doc.large && <button className="outline-button" onClick={() => invoke('saveAs')}>Save As…</button>}</div>}
-      {doc.large && <div className="page-bar"><span>{doc.readOnly ? 'Read-only' : doc.dirty ? 'Save this page to navigate' : 'Page editing'} · {doc.large.offset.toLocaleString()}–{doc.large.end.toLocaleString()} / {doc.size.toLocaleString()} bytes</span><button className="outline-button" disabled={doc.dirty || doc.large.index === 0} onClick={() => safe(() => m.readPage(doc, doc.large.index - 1))}>Previous page</button><button className="outline-button" disabled={doc.dirty} onClick={() => setDialog({kind: 'fields', label: 'Go to file page', fields: [{name: 'page', label: `Page (1–${doc.large.pages})`, value: doc.large.index + 1, type: 'number', min: 1, max: doc.large.pages}], submit: ({page}) => m.readPage(doc, Number(page) - 1)})}>{doc.large.index + 1} / {doc.large.pages}</button><button className="outline-button" disabled={doc.dirty || doc.large.index >= doc.large.pages - 1} onClick={() => safe(() => m.readPage(doc, doc.large.index + 1))}>Next page</button>{active && <button className="outline-button" disabled={commands.wholeFile.disabled} onClick={() => invoke('wholeFile')}>Find Across Pages…</button>}</div>}
+      {active && doc.external && <div className="conflict" role="alert">
+        <AlertTriangle size={15} />
+        <span>{t(doc.external.missing ? 'File moved or removed on disk.' : 'File changed on disk.')}</span>
+        {!doc.external.error && <>
+          {!doc.large && <button className="outline-button" onClick={() => safe(compareDisk)}>{t('Compare')}</button>}
+          <button className="outline-button" onClick={() => invoke('reload')}>{t('Reload')}</button>
+        </>}
+        {!doc.large && <button className="outline-button" onClick={() => invoke('saveAs')}>{t('Save As…')}</button>}
+      </div>}
+      {doc.large && <div className="page-bar">
+        <span>{t(doc.readOnly ? 'Read-only' : doc.dirty ? 'Save this page to navigate' : 'Page editing')} · {t('{start}–{end} / {size} bytes', {
+          start: formatNumber(doc.large.offset), end: formatNumber(doc.large.end), size: formatNumber(doc.size),
+        })}</span>
+        <button className="outline-button" disabled={doc.dirty || doc.large.index === 0} onClick={() => safe(() => m.readPage(doc, doc.large.index - 1))}>{t('Previous page')}</button>
+        <button className="outline-button" disabled={doc.dirty} onClick={() => setDialog({
+          kind: 'fields', label: 'Go to file page',
+          fields: [{name: 'page', label: t('Page (1–{pages})', {pages: formatNumber(doc.large.pages)}), value: doc.large.index + 1, type: 'number', min: 1, max: doc.large.pages}],
+          submit: ({page}) => m.readPage(doc, Number(page) - 1),
+        })}>{formatNumber(doc.large.index + 1)} / {formatNumber(doc.large.pages)}</button>
+        <button className="outline-button" disabled={doc.dirty || doc.large.index >= doc.large.pages - 1} onClick={() => safe(() => m.readPage(doc, doc.large.index + 1))}>{t('Next page')}</button>
+        {active && <button className="outline-button" disabled={commands.wholeFile.disabled} onClick={() => invoke('wholeFile')}>{t('Find Across Pages…')}</button>}
+      </div>}
       <div className="editor-body"><EditorSurface doc={doc} settings={m.settings} slot={slot} attach={m.attach} onEdit={onEdit} onCursor={onCursor} activate={m.setSlot} onScroll={onScroll} matches={active && find.show ? find.result.matches : noMatches} matchIndex={active ? find.index : -1} />
         {minimap && active && <DocumentMap text={doc.text} navigate={line => goTo(m.selectedView(), line)} />}</div>
     </section>
@@ -283,21 +305,35 @@ function App() {
       <div className="central"><div className="editing-area"><div className={`panes ${m.split}`}>{viewPane('main', m.main)}{m.split && viewPane('secondary', m.secondary)}</div>{companion && <Companion mode={companion} doc={m.doc} close={() => setCompanion('')} />}</div>{output && <Output data={output} close={() => setOutput(null)} />}
         {find.show && <FindBar query={find.query} change={find.change} replace={find.show === 'replace'} result={find.result} index={find.index} next={find.next} apply={find.apply} close={find.close} mark={() => invoke('markMatches')} options={() => invoke('searchOptions')} input={find.input} />}</div>
     </main>
-    <footer className="status-bar" aria-label="Document status"><div className="status-file" title={m.doc.path ?? m.doc.name}><FileGlyph name={m.doc.name} size={14} /><span>{m.doc.name}</span><span className={m.doc.dirty ? 'unsaved-text' : ''}>{m.doc.dirty ? 'Unsaved' : m.doc.readOnly ? 'Read-only' : m.doc.sample ? 'Demo' : m.doc.path ? 'Saved' : 'New'}</span>{recording && <span className="unsaved-text">● Recording</span>}{tail === m.doc.id && <span>Following</span>}</div><div className="status-controls">
-      <button className="inspect-status" onClick={() => invoke('inspectText')} title="Inspect words, characters, and hidden symbols" aria-label="Inspect & clean text">{m.doc.large ? 'Page length' : 'Length'}: {m.doc.text.length.toLocaleString()}</button><span className="status-metric">Lines: {status.lines.toLocaleString()}</span><button onClick={() => invoke('goto')} title="Go to line">Ln {status.line}, Col {status.col}{status.count ? ` (${status.count} selected)` : ''}</button><button onClick={() => setDialog({kind: 'palette', label: 'Line Endings', items: ['LF', 'CRLF', 'CR'].map(label => ({id: label, label})), run: item => invoke(item.id.toLowerCase())})} title="Line endings">{m.doc.mixed ? `Mixed (${m.doc.eol})` : m.doc.eol}</button><button onClick={() => invoke('convert')} title="Convert encoding">{m.doc.encoding}</button><button onClick={() => invoke('language')} title="Select language">{mode?.name ?? 'Plain Text'}</button><button onClick={() => invoke('settings')} title="Indentation">{m.settings.spaces ? 'Spaces' : 'Tabs'}: {m.settings.tabSize}</button><button onClick={() => invoke('zoomReset')} title="Reset editor zoom">{Math.round(m.settings.fontSize / 15 * 100)}%</button><button onClick={() => invoke('overwrite')} title="Toggle overwrite">{status.overwrite ? 'OVR' : 'INS'}</button>
+    <footer className="status-bar" aria-label={t('Document status')}><div className="status-file" title={m.doc.path ?? documentTitle(m.doc, t)}>
+      <FileGlyph name={m.doc.name} size={14} />
+      <span>{documentTitle(m.doc, t)}</span>
+      <span className={m.doc.dirty ? 'unsaved-text' : ''}>{t(m.doc.dirty ? 'Unsaved' : m.doc.readOnly ? 'Read-only' : m.doc.sample ? 'Demo' : m.doc.path ? 'Saved' : 'New')}</span>
+      {recording && <span className="unsaved-text">{t('● Recording')}</span>}
+      {tail === m.doc.id && <span>{t('Following')}</span>}
+    </div><div className="status-controls">
+      <button className="inspect-status" onClick={() => invoke('inspectText')} title={t('Inspect words, characters, and hidden symbols')} aria-label={t('Inspect & clean text')}>{t(m.doc.large ? 'Page length: {count}' : 'Length: {count}', {count: formatNumber(m.doc.text.length)})}</button>
+      <span className="status-metric">{t('Lines: {count}', {count: formatNumber(status.lines)})}</span>
+      <button onClick={() => invoke('goto')} title={t('Go to line')}>{t('Ln {line}, Col {column}', {line: formatNumber(status.line), column: formatNumber(status.col)})}{status.count ? t(' ({count} selected)', {count: formatNumber(status.count)}) : ''}</button>
+      <button onClick={() => setDialog({kind: 'palette', label: 'Line Endings', items: ['LF', 'CRLF', 'CR'].map(label => ({id: label, label})), run: item => invoke(item.id.toLowerCase())})} title={t('Line endings')}>{m.doc.mixed ? t('Mixed ({eol})', {eol: m.doc.eol}) : m.doc.eol}</button>
+      <button onClick={() => invoke('convert')} title={t('Convert encoding')}>{m.doc.encoding}</button>
+      <button onClick={() => invoke('language')} title={t('Select language')}>{mode?.name ?? t('Plain Text')}</button>
+      <button onClick={() => invoke('settings')} title={t('Indentation')}>{t(m.settings.spaces ? 'Spaces: {size}' : 'Tabs: {size}', {size: m.settings.tabSize})}</button>
+      <button onClick={() => invoke('zoomReset')} title={t('Reset editor zoom')}>{Math.round(m.settings.fontSize / 15 * 100)}%</button>
+      <button onClick={() => invoke('overwrite')} title={t('Toggle overwrite')}>{t(status.overwrite ? 'OVR' : 'INS')}</button>
     </div></footer>
     <input type="file" multiple ref={m.fileInput} hidden onChange={event => { const files = [...event.target.files]; event.target.value = ''; safe(() => m.openBrowser(files)) }} />
     <input type="file" ref={importInput} hidden onChange={event => { const file = event.target.files[0]; event.target.value = ''; safe(() => importFile(file)) }} />
     <pre id="print-sheet" />
-    {notice && <div className="toast" role="status">{notice}<IconButton icon={X} label="Dismiss notification" onClick={() => setNotice(null)} /></div>}
-    {drag && <div className="drop-overlay">Drop to open files or a folder</div>}
+    {notice && <div className="toast" role="status">{notice}<IconButton icon={X} label={t('Dismiss notification')} onClick={() => setNotice(null)} /></div>}
+    {drag && <div className="drop-overlay">{t('Drop to open files or a folder')}</div>}
     {context && <div className="context-overlay" onPointerDown={() => setContext(null)}><div className="menu-items context-menu" style={{left: Math.min(context.x, window.innerWidth - 210), top: Math.min(context.y, window.innerHeight - 180)}} onPointerDown={event => event.stopPropagation()}>
-      <button onClick={() => {m.amend(context.doc.id, {pinned: !context.doc.pinned}); setContext(null)}}>{context.doc.pinned ? 'Unpin tab' : 'Pin tab'}</button><button onClick={() => {safe(() => m.save(context.doc.id)); setContext(null)}}>Save</button><button onClick={() => {safe(() => m.close([context.doc.id])); setContext(null)}}>Close</button><button onClick={() => {safe(() => m.close(m.docs.filter(item => item.id !== context.doc.id && !item.pinned).map(item => item.id))); setContext(null)}}>Close other tabs</button>
+      <button onClick={() => {m.amend(context.doc.id, {pinned: !context.doc.pinned}); setContext(null)}}>{t(context.doc.pinned ? 'Unpin tab' : 'Pin tab')}</button><button onClick={() => {safe(() => m.save(context.doc.id)); setContext(null)}}>{t('Save')}</button><button onClick={() => {safe(() => m.close([context.doc.id])); setContext(null)}}>{t('Close')}</button><button onClick={() => {safe(() => m.close(m.docs.filter(item => item.id !== context.doc.id && !item.pinned).map(item => item.id))); setContext(null)}}>{t('Close other tabs')}</button>
     </div></div>}
     {dialog?.kind === 'palette' && <Palette key={dialog.label} mode={dialog.label} items={dialog.items} close={closeDialog} run={item => safe(() => dialog.run(item))} />}
     {dialog?.kind === 'fields' && <Fields key={dialog.label} {...dialog} close={closeDialog} />}
     {dialog?.kind === 'settings' && <Settings settings={m.settings} change={changeSettings} close={closeDialog} keybindings={() => invoke('keybindings')} customLanguage={() => invoke('customLanguage')} tools={() => invoke('tools')} />}
-    {dialog?.kind === 'about' && <Dialog label="About Margin" close={closeDialog}><div className="form"><p>Margin is an offline desktop editor for notes, lists, logs, and other plain text.</p><p>Version {version} · MIT</p><button className="outline-button" onClick={() => invoke('repository')}>Source and releases</button></div></Dialog>}
+    {dialog?.kind === 'about' && <Dialog label="About Margin" close={closeDialog}><div className="form"><p>{t('Margin is an offline desktop editor for notes, lists, logs, and other plain text.')}</p><p>{t('Version {version} · MIT', {version})}</p><button className="outline-button" onClick={() => invoke('repository')}>{t('Source and releases')}</button></div></Dialog>}
     {dialog?.kind === 'inspect-text' && <TextInspector snapshot={dialog.snapshot} close={closeDialog} />}
     {dialog?.kind === 'open-search' && <OpenSearch docs={m.docs} focus={m.focus} close={closeDialog} />}
     {dialog?.kind === 'large-search' && <LargeSearch api={api} doc={m.doc} close={closeDialog} initialQuery={find.query} jump={match => safe(async () => { await m.readPage(m.doc, match.page, match); m.selectedView()?.focus() })} />}
@@ -307,6 +343,7 @@ function App() {
 }
 
 function OpenSearch({docs, focus, close}) {
+  const {t} = useLocale()
   const [query, setQuery] = useState('')
   const deferred = useDeferredValue(query)
   const matches = []
@@ -314,10 +351,12 @@ function OpenSearch({docs, focus, close}) {
     const lines = doc.text.slice(0, 8 * 1024 * 1024).split('\n')
     for (let i = 0; i < lines.length && matches.length < 300; i++) {
       const col = lines[i].toLowerCase().indexOf(deferred.toLowerCase())
-      if (col >= 0) matches.push({id: doc.id, line: i + 1, col: col + 1, value: lines[i].slice(0, 200), name: doc.name})
+      if (col >= 0) matches.push({id: doc.id, line: i + 1, col: col + 1, value: lines[i].slice(0, 200), name: documentTitle(doc, t)})
     }
   }
-  return <Dialog label="Find in Open Documents" close={close}><div className="form"><label>Search open documents<input value={query} data-focus onChange={event => setQuery(event.target.value)} /></label><div className="palette-results">{matches.map(match => <button key={`${match.id}:${match.line}`} onClick={() => { close(); focus(match.id, undefined, {line: match.line, column: match.col}) }}><span><strong>{match.name}:{match.line}</strong><small>{match.value}</small></span></button>)}</div></div></Dialog>
+  return <Dialog label="Find in Open Documents" close={close}><div className="form"><label>{t('Search open documents')}<input value={query} data-focus onChange={event => setQuery(event.target.value)} /></label><div className="palette-results">{matches.map(match => <button key={`${match.id}:${match.line}`} onClick={() => { close(); focus(match.id, undefined, {line: match.line, column: match.col}) }}><span><strong>{match.name}:{match.line}</strong><small>{match.value}</small></span></button>)}</div></div></Dialog>
 }
 
-createRoot(document.getElementById('root')).render(<App />)
+loadInterfaceLanguage(api).then(initial => {
+  createRoot(document.getElementById('root')).render(<LocaleProvider api={api} initial={initial}><App /></LocaleProvider>)
+})

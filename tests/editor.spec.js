@@ -14,6 +14,46 @@ async function command(page, name) {
 
 test.beforeEach(async ({page}) => { await page.goto('/'); await expect(editor(page)).toBeVisible() })
 
+test('L02 applies the system language and preserves editor state on language switches', async ({browser}, testInfo) => {
+  const context = await browser.newContext({locale: 'zh-CN', baseURL: testInfo.project.use.baseURL, viewport: {width: 650, height: 540}})
+  try {
+    const page = await context.newPage()
+    await page.goto('/')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+    const chineseEditor = page.getByRole('textbox', {name: '文档编辑器'})
+    await expect(chineseEditor).toBeFocused()
+    await page.keyboard.insertText('草稿 draft')
+    await page.getByRole('button', {name: '设置', exact: true}).click()
+    await page.getByRole('button', {name: /^首选项/}).click()
+    const language = page.locator('dialog select').first()
+    await expect(page.getByRole('combobox', {name: '界面语言'})).toHaveValue('system')
+    await language.selectOption('en')
+    await expect(page.getByRole('dialog', {name: 'Settings'})).toBeVisible()
+    await expect(page.getByRole('combobox', {name: 'Interface language'})).toBeFocused()
+    await language.selectOption('zh-CN')
+    await expect(page.getByRole('combobox', {name: '界面语言'})).toHaveValue('zh-CN')
+    await expect(page.getByRole('dialog')).toBeVisible()
+    if (process.env.MARGIN_SCREENSHOTS) {
+      await page.setViewportSize({width: 1024, height: 720})
+      await page.evaluate(() => document.fonts.ready)
+      await page.screenshot({path: 'docs/screenshots/interface-language.png', animations: 'disabled'})
+    }
+    await page.keyboard.press('Escape')
+    await expect(chineseEditor).toContainText('草稿 draft')
+    await page.getByRole('button', {name: '撤销', exact: true}).click()
+    await expect(chineseEditor).not.toContainText('草稿 draft')
+    await page.reload()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+    await page.getByRole('button', {name: '设置', exact: true}).click()
+    await page.getByRole('button', {name: /^首选项/}).click()
+    await expect(page.getByRole('combobox', {name: '界面语言'})).toHaveValue('zh-CN')
+    await language.selectOption('system')
+    await expect(page.getByRole('combobox', {name: '界面语言'})).toHaveValue('system')
+  } finally {
+    await context.close()
+  }
+})
+
 test('inspect pasted text, preview an opt-in cleanup, apply and undo in one step', async ({page}) => {
   const original = 'copy\u00a0text\u200b  \nkeep 👩‍💻'
   await page.keyboard.insertText(original)

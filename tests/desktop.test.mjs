@@ -9,21 +9,51 @@ import path from 'node:path'
 import {_electron as electron, expect} from '@playwright/test'
 import {encode} from '../desktop/codec.mjs'
 import {EDIT_LIMIT, PAGE_SIZE} from '../desktop/files.mjs'
+import {interfaceLocale} from '../shared/locale.mjs'
 
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control'
 const executablePath = process.env.MARGIN_EXECUTABLE || undefined
 
-async function launch(profile, files = []) {
-  const app = await electron.launch({executablePath, args: [...(executablePath ? [] : ['.']), ...files], env: {...process.env, MARGIN_PROFILE: profile}, timeout: 25000})
+async function launch(profile, files = [], testLocale = 'en-US') {
+  const app = await electron.launch({executablePath, args: [...(executablePath ? [] : ['.']), ...files], env: {...process.env, MARGIN_PROFILE: profile, MARGIN_TEST_LOCALE: testLocale}, timeout: 25000})
   try {
     const page = await app.firstWindow({timeout: 15000})
-    await expect(page.getByRole('textbox', {name: 'Document editor'})).toBeVisible({timeout: 12000})
+    await expect(page.locator('.cm-content')).toBeVisible({timeout: 12000})
     return {app, page}
   } catch (error) {
     app.process().kill()
     throw error
   }
 }
+
+test('L01 defaults to the native OS language and handles a profile from 1.0', {timeout: 40000}, async t => {
+  const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-system-language-'))
+  await fs.writeFile(path.join(profile, 'session.json'), JSON.stringify({version: 1, docs: [], settings: {recover: false, wrap: true}}))
+  const {app, page} = await launch(profile, [], '')
+  t.after(async () => {
+    await app.close().catch(() => {})
+    await fs.rm(profile, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  const native = await app.evaluate(({app}) => {
+    const preferred = app.getPreferredSystemLanguages()
+    return preferred.length ? preferred : [app.getLocale()]
+  })
+  const {preference, systemLanguages} = await page.evaluate(() => window.margin.interfaceLanguage())
+  assert.equal(preference, 'system')
+  assert.deepEqual(systemLanguages, native)
+  const expected = interfaceLocale('system', native)
+  await expect(page.locator('html')).toHaveAttribute('lang', expected)
+  await expect(page.getByRole('textbox', {name: expected === 'zh-CN' ? '文档编辑器' : 'Document editor'})).toBeVisible()
+  if (process.platform === 'darwin') {
+    await page.evaluate(() => window.margin.setInterfaceLanguage('zh-CN'))
+    const nativeMenu = await app.evaluate(({Menu}) => Menu.getApplicationMenu().items.map(item => ({
+      label: item.label,
+      labels: item.submenu?.items.map(subitem => subitem.label) ?? [],
+    })))
+    assert.ok(nativeMenu.some(item => item.label === '编辑' && item.labels.includes('撤销')))
+    assert.ok(nativeMenu.some(item => item.labels.includes('退出 Margin')))
+  }
+})
 
 test('I01/I05/I07 open from CLI, edit, write encoded bytes, block external overwrite and recover after close', {timeout: 75000}, async t => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-desktop-'))

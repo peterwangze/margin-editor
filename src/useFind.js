@@ -1,10 +1,12 @@
 import {useEffect, useRef, useState} from 'react'
 import {EditorView} from '@codemirror/view'
 import {emptyQuery} from '../shared/text.mjs'
+import {useLocale} from './i18n'
 
 const empty = {matches: [], pending: false}
 
 export function useFind(doc, selectedView, notify) {
+  const {t, formatNumber} = useLocale()
   const [show, setShow] = useState('')
   const [query, setQuery] = useState(emptyQuery)
   const [result, setResult] = useState(empty)
@@ -45,7 +47,7 @@ export function useFind(doc, selectedView, notify) {
   const change = value => {
     if (value.inSelection) {
       const selection = selectedView()?.state.selection.main
-      if (!selection || selection.empty) { notify('Select text before enabling In selection.'); return }
+      if (!selection || selection.empty) { notify(t('Select text before enabling In selection.')); return }
       setRange({id: doc.id, from: selection.from, to: selection.to})
     }
     setQuery({...query, ...value})
@@ -87,7 +89,7 @@ export function useFind(doc, selectedView, notify) {
     if (query.inSelection && range?.id === doc.id) setRange({...range, to: range.to + changes.reduce((delta, item) => delta + item.insert.length - (item.to - item.from), 0)})
     activeMatch.current = match.from + match.insert.length
     view.dispatch({changes, userEvent: 'input.replace'})
-    notify(`Replaced ${changes.length} ${changes.length === 1 ? 'match' : 'matches'}.`)
+    notify(t(changes.length === 1 ? 'Replaced {count} match.' : 'Replaced {count} matches.', {count: formatNumber(changes.length)}))
   }
   return {show, setShow, query, result, index, change, open, close, next, apply, input}
 }

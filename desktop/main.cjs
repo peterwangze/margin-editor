@@ -5,6 +5,7 @@ const {pathToFileURL} = require('node:url')
 const {Worker} = require('node:worker_threads')
 const {spawn} = require('node:child_process')
 const {createHash, randomUUID} = require('node:crypto')
+const {installMenu} = require('./localized-menu.cjs')
 
 const profile = process.env.MARGIN_PROFILE || (process.env.PORTABLE_EXECUTABLE_DIR && path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'Margin Data'))
 if (profile) app.setPath('userData', path.resolve(profile))
@@ -22,7 +23,37 @@ let sessionQueue = Promise.resolve()
 let closing = false
 let closeAllowed = false
 let quitRequested = false
+let uiPreference = 'system'
+let uiLocale
+let languageQueue = Promise.resolve()
 const files = import('./files.mjs')
+const language = import('../shared/locale.mjs')
+
+const languagePath = () => path.join(app.getPath('userData'), 'ui-language.json')
+
+function systemLanguages() {
+  const testLocale = process.env.MARGIN_TEST_LOCALE
+  if (testLocale && process.env.MARGIN_PROFILE && process.argv.some(arg => /^--remote-debugging-port=\d+$/.test(arg))) return [testLocale]
+  const preferred = app.getPreferredSystemLanguages()
+  return preferred.length ? preferred : [app.getLocale()]
+}
+
+async function applyInterfaceLanguage() {
+  const locale = (await language).interfaceLocale(uiPreference, systemLanguages())
+  if (locale !== uiLocale) {
+    uiLocale = locale
+    installMenu(Menu, locale)
+  }
+  return locale
+}
+
+async function readInterfaceLanguage() {
+  try {
+    const saved = JSON.parse(await fs.readFile(languagePath(), 'utf8'))
+    uiPreference = (await language).languagePreference(saved?.preference)
+  } catch { /* Missing or invalid settings use the default. */ }
+  await applyInterfaceLanguage()
+}
 
 function argumentsFor(argv, cwd) {
   const args = argv.slice(process.defaultApp ? 2 : 1)
@@ -106,6 +137,16 @@ async function createWindow() {
 }
 
 const actions = {
+  interfaceLanguage() { return {preference: uiPreference, systemLanguages: systemLanguages()} },
+  async systemLanguages() { await applyInterfaceLanguage(); return systemLanguages() },
+  async setInterfaceLanguage(preference) {
+    uiPreference = (await language).languagePreference(preference)
+    const data = JSON.stringify({preference: uiPreference})
+    const write = languageQueue.catch(() => {}).then(async () => (await files).atomicWrite(languagePath(), data))
+    languageQueue = write
+    await applyInterfaceLanguage()
+    return write
+  },
   async pickFiles() { return (await dialog.showOpenDialog(window, {properties: ['openFile', 'multiSelections']})).filePaths },
   async pickFolder() { return (await dialog.showOpenDialog(window, {properties: ['openDirectory']})).filePaths[0] ?? null },
   async open(file, encoding) {
@@ -130,7 +171,7 @@ const actions = {
     return path.resolve(path.dirname(session), source.replaceAll('\\', '/'))
   },
   async saveDialog(defaultPath) {
-    const {filePath} = await dialog.showSaveDialog(window, {defaultPath, title: 'Save document'})
+    const {filePath} = await dialog.showSaveDialog(window, {defaultPath, title: uiLocale === 'zh-CN' ? '保存文档' : 'Save document'})
     if (!filePath) return null
     return await (await files).existing(filePath) ?? filePath
   },
@@ -219,10 +260,10 @@ const actions = {
     closing = false
     if (!allowed) { quitRequested = false; return }
     closeAllowed = true
-    setImmediate(() => {
+    languageQueue.catch(() => {}).then(() => setImmediate(() => {
       if (quitRequested) app.quit()
       else window?.close()
-    })
+    }))
   },
   async confirm(message, detail, buttons) {
     const {response} = await dialog.showMessageBox(window, {type: 'warning', message, detail, buttons, defaultId: 0, cancelId: buttons.length - 1, noLink: true})
@@ -248,8 +289,7 @@ else {
       if (url.hostname !== 'local' || !resource.startsWith(dist + path.sep)) return new Response(null, {status: 404})
       return net.fetch(pathToFileURL(resource).href)
     })
-    if (process.platform === 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([{role: 'appMenu'}, {role: 'editMenu'}, {role: 'windowMenu'}]))
-    else Menu.setApplicationMenu(null)
+    await readInterfaceLanguage()
     for (const [name, handler] of Object.entries(actions)) ipcMain.handle(`margin:${name}`, (event, ...args) => {
       if (event.sender !== window?.webContents || event.senderFrame?.url !== page) throw new Error('Invalid request origin.')
       return handler(...args)

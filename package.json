@@ -1,6 +1,6 @@
 {
   "name": "margin-editor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A local-first desktop text editor for Windows, macOS and Linux",
   "author": "peterwangze",
   "license": "MIT",
@@ -10,7 +10,7 @@
     "dev": "vite --host 127.0.0.1",
     "start": "electron .",
     "build": "vite build",
-    "test": "node --test tests/core.test.mjs tests/inspect-text.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/inspect-text.test.mjs tests/locale.test.mjs",
     "test:ui": "playwright test tests/editor.spec.js",
     "test:desktop": "node --test tests/desktop.test.mjs",
     "package": "electron-builder --publish never"
