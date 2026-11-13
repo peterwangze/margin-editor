@@ -42,6 +42,24 @@
 
 安装包的 CI 通过表示已生成工件，带 Smoke 步骤的架构还验证了包内应用的真实编辑与磁盘操作。完整安装程序、系统文件关联和卸载用例需要独立证据。
 
+## v0.9.1 执行记录
+
+候选提交 `7fd0333bf6ab1b53cb78fb05771a292d1b94dba4`。[构建与测试](https://github.com/peterwangze/margin-editor/actions/runs/43337492397) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43338101397) · [公开发行页](https://github.com/peterwangze/margin-editor/releases/tag/v0.9.1)
+
+| 范围 | 状态 | 已观察的结果 |
+| --- | --- | --- |
+| S01–S03 | 已执行项通过 | 九项 Chromium 交互用例覆盖视觉布局、窄窗、键盘焦点、主题和查找等操作；以实际界面截图对照设计稿。[视觉记录](design/verification.md) |
+| S04 | 通过 | 公开发行页及仓库首页都有三平台下载链接；核对公开 API 的 12 个资产摘要与发行清单的 SHA-256 值。 |
+| S05–S06 | 部分通过 | 本地生产依赖审计通过；三平台人工无障碍、IME 和 200% 缩放尚待验证。 |
+| I01–I09 / I12 | 已执行项通过 | 八项核心用例及九项浏览器交互用例通过；Windows x64 与 Linux x64/arm64 各通过六项桌面用例，覆盖真实磁盘操作、会话和项目导入、大文件跨页跳转和保存、目录替换。Boost 正则、偏好和快捷键、UDL 的已实现部分有回归用例。 |
+| I10 | 未实现 | 原版 Windows 插件加载与 ABI 仍为发布阻塞项。 |
+| I11 Windows x64 | 安装回归通过 | NSIS 安装、从安装目录运行六项桌面用例、卸载及清理检查均通过。 |
+| I11 Windows arm64 | 生成通过 | 交叉构建生成安装版和便携版；ARM64 Windows 实机启动与安装未验证。 |
+| I11 macOS x64/arm64 | 包内运行通过 | 两种架构的 runner 启动打包的应用，在阻止页面 HTTP(S) 请求的条件下，验证 CLI 打开、编辑保存、CRLF 和查找。Gatekeeper 和人工安装未验证。 |
+| I11 Linux x64/arm64 | DEB 包内运行通过 | 两种架构从 DEB 提取并运行桌面用例；AppImage 已生成，FUSE 启动和系统安装/卸载尚待验证。 |
+
+候选版本保持预发行状态。各行的通过结论仅适用于列出的用例和运行环境。
+
 ## v0.9.0 执行记录
 
 候选提交 `59318e53159215d80ddc7cac907ee14d8d3f1b4b`。所有六个构建任务通过。[GitHub Actions 运行记录](https://github.com/peterwangze/margin-editor/actions/runs/43221655134)
