@@ -11,7 +11,7 @@
 Margin 0.9.1 opens to a document-first editor with a grouped toolbar, full-width tabs, and a bottom Find and Replace panel. Open the file tree or outline from View when you need it.
 
 - Find and replace within a document, or review folder-wide replacements before applying selected files.
-- Regular expression search and replace uses the bundled Boost.Regex 1.90 engine. It supports patterns such as `\K` and named-group replacements such as `$+{name}`.
+- Regular expression search and replace uses the bundled Boost.Regex 1.92 engine. It supports patterns such as `\K` and named-group replacements such as `$+{name}`.
 - Inspect encoding and line endings from the status bar. Compare external changes and keep optional backups on save.
 - Use the command palette for bookmarks, column editing, macros, JSON formatting, Markdown preview, and text conversions.
 - Import Notepad++ XML sessions and project trees, common preferences, supported menu shortcuts, and UDLs with keyword colors, comments, operators, delimiters and folds.
