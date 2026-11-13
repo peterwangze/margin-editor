@@ -180,16 +180,11 @@ export function useDocuments(api, notify) {
     const result = await api.largePage(current.path, current.encoding, index)
     const latest = docsRef.current.find(item => item.id === current.id)
     if (latest !== current) return
-    amend(doc.id, {...result, positions: undefined, epoch: (doc.epoch ?? 0) + 1, cursor: selection?.from ?? 0, savedText: result.text, savedFormat: [result.encoding, result.eol, result.mixed], bookmarks: [], external: null})
+    const anchor = Math.min(selection?.from ?? 0, result.text.length)
+    const head = Math.min(selection?.to ?? anchor, result.text.length)
+    const positions = {[slot]: {anchor, head, top: 0, horizontal: 0, reveal: Boolean(selection)}}
+    amend(doc.id, {...result, positions, epoch: (current.epoch ?? 0) + 1, cursor: anchor, savedText: result.text, savedFormat: [result.encoding, result.eol, result.mixed], bookmarks: [], external: null})
     cursors.current.delete(doc.id)
-    requestAnimationFrame(() => {
-      for (const {view, id} of Object.values(views.current)) if (id === doc.id) {
-        const anchor = Math.min(selection?.from ?? 0, view.state.doc.length)
-        const head = Math.min(selection?.to ?? anchor, view.state.doc.length)
-        view.dispatch({selection: {anchor, head}, scrollIntoView: true})
-        if (!selection) view.scrollDOM.scrollTop = 0
-      }
-    })
   }
 
   async function close(ids) {

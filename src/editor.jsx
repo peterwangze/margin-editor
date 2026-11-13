@@ -182,6 +182,7 @@ export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, ac
     current.current.attach(slot, view, doc.id)
     const scroller = view.scrollDOM
     if (saved && saved.epoch === doc.epoch) scroller.scrollTop = saved.top
+    else if (position?.reveal) view.dispatch({effects: EditorView.scrollIntoView(view.state.selection.main.head, {y: 'center'})})
     else if (position) {
       const line = view.state.doc.line(Math.min(view.state.doc.lines, position.top + 1))
       view.dispatch({effects: EditorView.scrollIntoView(line.from, {y: 'start'})})
