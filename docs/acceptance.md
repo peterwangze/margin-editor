@@ -59,6 +59,21 @@ F01–F12 是早期迁移对照，保留子项和历史结果。当前产品承�
 
 安装包的 CI 通过表示已生成工件，带 Smoke 步骤的架构还验证了包内应用的真实编辑与磁盘操作。完整安装程序、系统文件关联和卸载用例需要独立证据。
 
+## v1.0.0 执行记录
+
+发行提交 `d351b253a5e94081f5051ba83b00aa8e9a443e01`。三平台 x64 与 ARM64 均在原生架构的 GitHub Actions 环境执行。[六组验收日志](https://github.com/peterwangze/margin-editor/actions/runs/43345898222) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43346933617) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.0.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.0.0/ACCEPTANCE.zip)
+
+| 范围 | 状态 | 已观察的结果 |
+| --- | --- | --- |
+| G01/G03 Windows x64、ARM64 | 通过 | 校验安装后 PE 架构、版本和运行时；实际运行 NSIS Setup 安装、从安装目录操作、卸载；另启动便携 EXE 并核对保存字节。没有发布者签名。 |
+| G01/G03 macOS Intel、Apple Silicon | 通过 | 校验并挂载 DMG，从 DMG 复制应用，也从 ZIP 解压并启动；两种形式核对架构、版本、运行时和临时签名。未公证。 |
+| G01/G03 Linux x64、ARM64 | 通过 | 在断网网络命名空间安装 DEB，核对 ELF 架构、版本、运行时和桌面入口；验证卸载。AppImage 用无 FUSE 解包运行模式启动。两个形式的交互仅使用回环网络。 |
+| G02 | 通过 | 12 个包都保存了布局、查找和检查器截图，验证窄窗无横向溢出、键盘焦点和自带中文字体离线加载；抽查三平台截图，中文和预览可读。 |
+| G04 | 通过 | 六组各运行 10 项桌面回归，验证外部修改拒绝覆盖、BOM 保留、禁止副本覆盖源文件、取消退出保存、强制终止后的快照恢复、显式退出和大文件跨页编辑等。11 项核心测试及 10 项浏览器测试通过。 |
+| G05 | 通过 | 公开 Latest 为正式版。逐一验证 12 个安装或便携包、`ACCEPTANCE.zip` 和校验清单的下载响应；清单 13 条 SHA-256 与 GitHub 资产摘要一致。 |
+
+`ACCEPTANCE.zip` 含各包截图、已执行步骤和静态包检查记录。Windows 和 macOS 的打包交互测试将 Chromium 指向回环代理并阻断页面外网请求，未断开整台 CI 主机。未验证各发行版的 FUSE 挂载、macOS Gatekeeper 交互、Windows 发布者签名、OS 级 IME 和屏幕阅读器，后续继续按对应条目补验。
+
 ## v0.9.1 执行记录
 
 候选提交 `7fd0333bf6ab1b53cb78fb05771a292d1b94dba4`。[构建与测试](https://github.com/peterwangze/margin-editor/actions/runs/43337492397) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43338101397) · [公开发行页](https://github.com/peterwangze/margin-editor/releases/tag/v0.9.1)

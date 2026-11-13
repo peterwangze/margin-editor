@@ -6,7 +6,7 @@
 
 Open Margin and start typing. The menu, toolbar, and document tabs keep common actions close, while the status bar shows the current encoding and line endings. When a quick edit turns into a batch change, review the result before writing anything to disk. Your files stay local on Windows, macOS, and Linux.
 
-[Download from GitHub Releases](https://github.com/peterwangze/margin-editor/releases) · [Product research](docs/research.md) · [Release acceptance checklist](docs/acceptance.md)
+[Download the latest stable release](https://github.com/peterwangze/margin-editor/releases/latest) · [Product research](docs/research.md) · [Release acceptance checklist](docs/acceptance.md)
 
 ![Margin in its Paper theme. A plain-text note fills the window below the document tabs, with encoding and line endings visible in the status bar.](docs/screenshots/workbench.png)
 
