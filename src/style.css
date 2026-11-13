@@ -1,5 +1,12 @@
+@font-face {
+  font-family: 'Margin Han';
+  src: url('@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+2E80-2FFF, U+3000-303F, U+31C0-31EF, U+3400-9FFF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF;
+}
 :root {
-  font: 14px 'Instrument Sans', 'Segoe UI', sans-serif;
+  font: 14px 'Instrument Sans', 'Segoe UI', 'Margin Han', sans-serif;
   color: #f2edf8;
   color-scheme: dark;
   --canvas: #191721;
@@ -25,7 +32,7 @@
   --danger: #ff9d9f;
   --warning: #edbb87;
   --success: #a2e9bf;
-  --mono: 'IBM Plex Mono', Consolas, monospace;
+  --mono: 'IBM Plex Mono', Consolas, 'Margin Han', monospace;
   --shadow: 0 8px 30px #09081076;
 }
 :root[data-theme='light'] {
@@ -216,7 +223,7 @@ svg { flex: none; vertical-align: middle; stroke-width: 1.65; }
 .inspect-inventory { max-height: 112px; overflow: auto; }
 .inspect-inventory ul { padding: 0; margin: 0; list-style: none; }
 .inspect-inventory li { display: grid; grid-template-columns: 8ch 1fr auto; align-items: baseline; gap: 6px; padding: 3px 0; }
-.inspect-inventory code, .inspect-change code { font-family: 'IBM Plex Mono', monospace; }
+.inspect-inventory code, .inspect-change code { font-family: var(--mono); }
 .inspect-options { display: grid; gap: 5px; border: 1px solid var(--line); border-radius: 5px; margin: 0; padding: 7px 10px 9px; min-width: 0; }
 .inspect-options .checkbox { justify-content: flex-start; }
 .inspect-options legend { color: var(--muted); padding-inline: 4px; }

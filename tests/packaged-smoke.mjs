@@ -110,6 +110,11 @@ try {
   await page.getByRole('button', {name: /^Select all/}).click()
   await editor.focus()
   await page.keyboard.insertText('offline edit\n中🙂\ncopy\u200b this  ')
+  const hanFaceLoaded = await page.evaluate(async () => {
+    const faces = await document.fonts.load('15px "Margin Han"', '中文')
+    return faces.length === 1 && faces[0].status === 'loaded'
+  })
+  assert.ok(hanFaceLoaded, 'Bundled Han font loads from the installed application')
   await toolbar.getByRole('button', {name: 'Save', exact: true}).click()
   await expect(page.getByText('Saved offline.txt', {exact: true})).toBeVisible()
   assert.equal(await fs.readFile(file, 'utf8'), 'offline edit\r\n中🙂\r\ncopy\u200b this  ')
@@ -148,7 +153,7 @@ try {
     arch: process.arch,
     packageForm,
     offline: 'Chromium used a loopback-only proxy and renderer HTTP(S) requests were blocked',
-    passed: ['desktop layout', 'narrow window', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'CRLF save', 'find and replace', 'inspect and clean', 'undo and redo', 'disk byte verification'],
+    passed: ['desktop layout', 'narrow window', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'CRLF save', 'find and replace', 'inspect and clean', 'undo and redo', 'disk byte verification'],
   }, null, 2) + '\n')
   console.log(`${packageForm}: layout, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup and undo passed`)
 } catch (error) {

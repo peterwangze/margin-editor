@@ -52,7 +52,7 @@ jobs:
             for screenshot in editor replace inspect; do test -s "$dir/$form-$screenshot.png"; done
             jq -e --arg platform "$node_platform" --arg arch "$arch" --arg form "$form" '
               .platform == $platform and .arch == $arch and .packageForm == $form and
-              (.passed | index("desktop layout") != null and index("inspect and clean") != null and index("disk byte verification") != null)
+              (.passed | index("desktop layout") != null and index("bundled Han font") != null and index("inspect and clean") != null and index("disk byte verification") != null)
             ' "$dir/$form.json"
           }
           for arch in x64 arm64; do
