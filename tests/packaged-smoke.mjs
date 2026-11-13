@@ -5,6 +5,7 @@ import fs from 'node:fs/promises'
 import {createServer} from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import {setTimeout as delay} from 'node:timers/promises'
 import {chromium, expect} from '@playwright/test'
 
 const executable = process.env.MARGIN_EXECUTABLE
@@ -39,13 +40,13 @@ let launchError
 child.on('error', error => { launchError = error })
 for (const pipe of [child.stdout, child.stderr]) pipe.on('data', data => { output = (output + data).slice(-10000) })
 
-function stopApplication() {
+function stopApplication(force = false) {
   if (child.exitCode !== null || child.signalCode !== null || !child.pid) return
   try {
     if (process.platform === 'win32') {
       execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {windowsHide: true, stdio: 'ignore', timeout: 7000})
     } else {
-      process.kill(-child.pid, 'SIGTERM')
+      process.kill(-child.pid, force ? 'SIGKILL' : 'SIGTERM')
     }
   } catch (error) {
     if (error.code !== 'ESRCH') child.kill('SIGKILL')
@@ -53,7 +54,7 @@ function stopApplication() {
 }
 
 const watchdog = setTimeout(() => {
-  stopApplication()
+  stopApplication(true)
   console.error(`Packaged application validation timed out.\n${output}`)
   process.exit(1)
 }, 75000)
@@ -155,9 +156,17 @@ try {
   console.error(output)
   throw error
 } finally {
-  await browser?.close().catch(() => {})
+  // Electron may defer SIGTERM while its renderer saves a recovery snapshot.
+  // Bound cleanup independently of the DevTools connection and all app helpers.
   stopApplication()
-  if (child.pid) await exited
+  if (child.pid) {
+    const done = exited.then(() => true)
+    if (!await Promise.race([done, delay(1500, false, {ref: false})])) {
+      stopApplication(true)
+      assert.ok(await Promise.race([done, delay(3000, false, {ref: false})]), 'Could not stop the packaged application')
+    }
+  }
+  if (browser) await Promise.race([browser.close().catch(() => {}), delay(1000, undefined, {ref: false})])
   await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
   clearTimeout(watchdog)
 }
