@@ -21,6 +21,7 @@ let hasRenderer = false
 let sessionQueue = Promise.resolve()
 let closing = false
 let closeAllowed = false
+let quitRequested = false
 const files = import('./files.mjs')
 
 function argumentsFor(argv, cwd) {
@@ -216,7 +217,12 @@ const actions = {
   initial() { hasRenderer = true; return queued.splice(0) },
   closeReply(allowed) {
     closing = false
-    if (allowed) { closeAllowed = true; setImmediate(() => window?.close()) }
+    if (!allowed) { quitRequested = false; return }
+    closeAllowed = true
+    setImmediate(() => {
+      if (quitRequested) app.quit()
+      else window?.close()
+    })
   },
   async confirm(message, detail, buttons) {
     const {response} = await dialog.showMessageBox(window, {type: 'warning', message, detail, buttons, defaultId: 0, cancelId: buttons.length - 1, noLink: true})
@@ -252,7 +258,8 @@ else {
     app.on('activate', () => { if (!window) createWindow().catch(console.error) })
   }).catch(error => { console.error(error); app.exit(1) })
   app.on('before-quit', event => {
-    if (applying) event.preventDefault()
+    if (applying) { quitRequested = false; event.preventDefault() }
+    else quitRequested = true
   })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 }

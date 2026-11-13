@@ -355,3 +355,21 @@ test('I07 restores a scratch tab and unsaved edits after the app is force termin
   await expect(page.getByRole('textbox', {name: 'Document editor'})).toContainText('unsaved notes 中')
   assert.deepEqual(await fs.readFile(filename), original)
 })
+
+test('I07 an explicit app Quit flushes the draft and exits the native process', {timeout: 35000}, async t => {
+  const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-explicit-quit-'))
+  const {app, page} = await launch(profile)
+  const child = app.process()
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    await fs.rm(profile, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  await page.getByRole('textbox', {name: 'Document editor'}).click()
+  await page.keyboard.insertText('keep on explicit quit')
+  const exit = once(child, 'exit', {signal: AbortSignal.timeout(8000)})
+  await app.evaluate(({app}) => { setTimeout(() => app.quit(), 25) })
+  assert.deepEqual(await exit, [0, null])
+  const session = JSON.parse(await fs.readFile(path.join(profile, 'session.json'), 'utf8'))
+  assert.equal(session.docs[0].text, 'keep on explicit quit')
+  assert.equal(session.docs[0].dirty, true)
+})
