@@ -4,11 +4,17 @@ import appChinese from './locales/app.zh-CN.js'
 import chromeChinese from './locales/chrome.zh-CN.js'
 import commandsChinese from './locales/commands.zh-CN.js'
 import panelsChinese from './locales/panels.zh-CN.js'
+import traditionalChinese from './locales/zh-TW.js'
+import japanese from './locales/ja.js'
+import korean from './locales/ko.js'
 
 export {interfaceLanguages} from '../shared/locale.mjs'
 
 const translations = {
   'zh-CN': {...chromeChinese, ...commandsChinese, ...panelsChinese, ...appChinese},
+  'zh-TW': traditionalChinese,
+  ja: japanese,
+  ko: korean,
 }
 const LocaleContext = createContext(null)
 const storageKey = 'margin.ui-language'

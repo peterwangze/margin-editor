@@ -5,7 +5,7 @@ const {pathToFileURL} = require('node:url')
 const {Worker} = require('node:worker_threads')
 const {spawn} = require('node:child_process')
 const {createHash, randomUUID} = require('node:crypto')
-const {installMenu} = require('./localized-menu.cjs')
+const {installMenu, saveDialogTitle} = require('./localized-menu.cjs')
 
 const profile = process.env.MARGIN_PROFILE || (process.env.PORTABLE_EXECUTABLE_DIR && path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'Margin Data'))
 if (profile) app.setPath('userData', path.resolve(profile))
@@ -171,7 +171,7 @@ const actions = {
     return path.resolve(path.dirname(session), source.replaceAll('\\', '/'))
   },
   async saveDialog(defaultPath) {
-    const {filePath} = await dialog.showSaveDialog(window, {defaultPath, title: uiLocale === 'zh-CN' ? '保存文档' : 'Save document'})
+    const {filePath} = await dialog.showSaveDialog(window, {defaultPath, title: saveDialogTitle(uiLocale)})
     if (!filePath) return null
     return await (await files).existing(filePath) ?? filePath
   },

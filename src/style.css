@@ -5,8 +5,30 @@
   font-display: swap;
   unicode-range: U+2E80-2FFF, U+3000-303F, U+31C0-31EF, U+3400-9FFF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF;
 }
+@font-face {
+  font-family: 'Margin Traditional';
+  src: url('@fontsource/noto-sans-tc/files/noto-sans-tc-chinese-traditional-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+2E80-2FFF, U+3000-303F, U+3100-312F, U+31A0-31BF, U+31C0-31EF, U+3400-9FFF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF;
+}
+@font-face {
+  font-family: 'Margin Japanese';
+  src: url('@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+2E80-2FFF, U+3000-30FF, U+31C0-31FF, U+3400-9FFF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF;
+}
+@font-face {
+  font-family: 'Margin Korean';
+  src: url('@fontsource/noto-sans-kr/files/noto-sans-kr-korean-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+1100-11FF, U+2E80-2FFF, U+3000-303F, U+3130-318F, U+3400-9FFF, U+A960-A97F, U+AC00-D7FF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF;
+}
 :root {
-  font: 14px 'Instrument Sans', 'Segoe UI', 'Margin Han', sans-serif;
+  --cjk: 'Margin Han', 'Margin Traditional', 'Margin Japanese', 'Margin Korean';
+  font: 14px 'Instrument Sans', 'Segoe UI', var(--cjk), sans-serif;
   color: #f2edf8;
   color-scheme: dark;
   --canvas: #191721;
@@ -32,9 +54,16 @@
   --danger: #ff9d9f;
   --warning: #edbb87;
   --success: #a2e9bf;
-  --mono: 'IBM Plex Mono', Consolas, 'Margin Han', monospace;
+  --mono: 'IBM Plex Mono', Consolas, var(--cjk), monospace;
   --shadow: 0 8px 30px #09081076;
 }
+:root[lang='zh-TW'] { --cjk: 'Margin Traditional', 'Margin Han', 'Margin Japanese', 'Margin Korean'; }
+:root[lang='ja'] { --cjk: 'Margin Japanese', 'Margin Traditional', 'Margin Han', 'Margin Korean'; }
+:root[lang='ko'] { --cjk: 'Margin Korean', 'Margin Traditional', 'Margin Han', 'Margin Japanese'; }
+.settings-form option[lang='zh-CN'] { font-family: 'Margin Han', sans-serif; }
+.settings-form option[lang='zh-TW'] { font-family: 'Margin Traditional', sans-serif; }
+.settings-form option[lang='ja'] { font-family: 'Margin Japanese', sans-serif; }
+.settings-form option[lang='ko'] { font-family: 'Margin Korean', sans-serif; }
 :root[data-theme='light'] {
   color-scheme: light;
   --canvas: #fdfcfb;

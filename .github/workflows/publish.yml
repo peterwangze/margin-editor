@@ -49,9 +49,10 @@ jobs:
             local platform=$1 arch=$2 form=$3 node_platform=$4
             local dir="evidence/acceptance-$platform-$arch"
             test -s "$dir/package-checks.txt"
-            for screenshot in editor replace inspect language chinese; do test -s "$dir/$form-$screenshot.png"; done
+            for screenshot in editor replace inspect language chinese zh-TW ja ko; do test -s "$dir/$form-$screenshot.png"; done
             jq -e --arg platform "$node_platform" --arg arch "$arch" --arg form "$form" '
               .platform == $platform and .arch == $arch and .packageForm == $form and
+              (.interfaceLocales | sort) == ["en","ja","ko","zh-CN","zh-TW"] and
               (.passed | index("desktop layout") != null and index("bundled Han font") != null and
                 index("inspect and clean") != null and index("disk byte verification") != null and
                 index("interface language and persistence") != null)

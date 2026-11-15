@@ -1,28 +1,40 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {interfaceLocale, languagePreference} from '../shared/locale.mjs'
+import {interfaceLanguages, interfaceLocale, languagePreference} from '../shared/locale.mjs'
 import app from '../src/locales/app.zh-CN.js'
 import chrome from '../src/locales/chrome.zh-CN.js'
 import commands from '../src/locales/commands.zh-CN.js'
 import panels from '../src/locales/panels.zh-CN.js'
+import traditional from '../src/locales/zh-TW.js'
+import japanese from '../src/locales/ja.js'
+import korean from '../src/locales/ko.js'
 
 test('interface language honors explicit choices and ordered OS preferences', () => {
   assert.equal(interfaceLocale('en', ['zh-Hans-CN']), 'en')
   assert.equal(interfaceLocale('zh-CN', ['en-US']), 'zh-CN')
-  assert.equal(interfaceLocale('system', ['ja-JP', 'zh-Hans-SG', 'en-US']), 'zh-CN')
+  assert.equal(interfaceLocale('system', ['it-IT', 'zh-Hans-SG', 'en-US']), 'zh-CN')
   assert.equal(interfaceLocale('system', ['en-GB', 'zh-CN']), 'en')
   assert.equal(interfaceLocale('system', ['zh_CN.UTF-8']), 'zh-CN')
-  assert.equal(interfaceLocale('system', ['zh-Hant-CN', 'zh-TW', 'de-DE']), 'en')
-  assert.equal(interfaceLocale('system', [null, '', 'ja-JP']), 'en')
+  assert.equal(interfaceLocale('system', ['zh-Hant-CN', 'zh-TW', 'de-DE']), 'zh-TW')
+  assert.equal(interfaceLocale('system', ['zh-HK', 'zh-CN']), 'zh-TW')
+  assert.equal(interfaceLocale('system', ['zh_MO.UTF-8']), 'zh-TW')
+  assert.equal(interfaceLocale('system', ['zh-Hans-TW']), 'zh-CN')
+  assert.equal(interfaceLocale('system', ['fr-CA', 'ja-JP', 'ko-KR']), 'ja')
+  assert.equal(interfaceLocale('system', ['ko_KR.UTF-8', 'en']), 'ko')
+  assert.equal(interfaceLocale('system', [null, '', 'fr-CA']), 'en')
+  for (const {value} of interfaceLanguages) assert.equal(interfaceLocale(value, ['en-US', 'zh-CN']), value)
   assert.equal(languagePreference('unknown'), 'system')
 })
 
-test('Chinese translations preserve named placeholders', () => {
+test('all translated locales cover the same messages and preserve named placeholders', () => {
   const parameters = value => [...value.matchAll(/\{([A-Za-z]\w*)\}/g)].map(match => match[1]).sort()
-  for (const dictionary of [app, chrome, commands, panels]) {
+  const simplified = {...chrome, ...commands, ...panels, ...app}
+  const keys = Object.keys(simplified).sort()
+  for (const [locale, dictionary] of Object.entries({'zh-CN': simplified, 'zh-TW': traditional, ja: japanese, ko: korean})) {
+    assert.deepEqual(Object.keys(dictionary).sort(), keys, `${locale} message coverage`)
     for (const [source, translation] of Object.entries(dictionary)) {
-      assert.notEqual(translation.trim(), '', source)
-      assert.deepEqual(parameters(translation), parameters(source), source)
+      assert.notEqual(translation.trim(), '', `${locale}: ${source}`)
+      assert.deepEqual(parameters(translation), parameters(source), `${locale}: ${source}`)
     }
   }
 })

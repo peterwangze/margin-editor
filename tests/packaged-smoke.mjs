@@ -24,6 +24,11 @@ let output = ''
 let browser
 let page
 const pageErrors = []
+const addedLocales = {
+  'zh-TW': {label: '繁體中文', settings: '設定', preference: '介面語言', system: '跟隨系統', editor: '文件編輯器', search: '尋找與取代', find: '尋找', replace: '取代', closeFind: '關閉尋找列', font: 'Margin Traditional', glyphs: '檔案與儲存'},
+  ja: {label: '日本語', settings: '設定', preference: '表示言語', system: 'システム設定に従う', editor: '文書エディター', search: '検索と置換', find: '検索', replace: '置換', closeFind: '検索バーを閉じる', font: 'Margin Japanese', glyphs: '日本語を探す'},
+  ko: {label: '한국어', settings: '설정', preference: '인터페이스 언어', system: '시스템 설정 따르기', editor: '문서 편집기', search: '찾기 및 바꾸기', find: '찾기', replace: '바꾸기', closeFind: '찾기 닫기', font: 'Margin Korean', glyphs: '한글 찾기'},
+}
 
 function stopApplication(force = false) {
   if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return
@@ -38,7 +43,7 @@ function stopApplication(force = false) {
   }
 }
 
-async function launch() {
+async function launch(systemLocale = 'zh-CN') {
   const server = createServer()
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
@@ -57,7 +62,7 @@ async function launch() {
     env: {
       ...process.env,
       MARGIN_PROFILE: profile,
-      MARGIN_TEST_LOCALE: 'zh-CN',
+      MARGIN_TEST_LOCALE: systemLocale,
       HTTPS_PROXY: 'http://127.0.0.1:9',
       HTTP_PROXY: 'http://127.0.0.1:9',
       NO_PROXY: 'localhost,127.0.0.1',
@@ -107,11 +112,24 @@ async function openLanguageSettings(chinese) {
   return settings.getByRole('combobox', {name: chinese ? '界面语言' : 'Interface language', exact: true})
 }
 
+function settingsLanguage(locale) {
+  const labels = addedLocales[locale]
+  const dialog = page.getByRole('dialog', {name: labels.settings, exact: true})
+  return dialog.getByRole('combobox', {name: labels.preference, exact: true})
+}
+
+async function expectSavedLanguage(preference) {
+  await expect.poll(async () => {
+    try { return JSON.parse(await fs.readFile(path.join(profile, 'ui-language.json'), 'utf8')).preference }
+    catch (error) { if (error.code === 'ENOENT') return null; throw error }
+  }).toBe(preference)
+}
+
 const watchdog = setTimeout(() => {
   stopApplication(true)
   console.error(`Packaged application validation timed out.\n${output}`)
   process.exit(1)
-}, 150000)
+}, 220000)
 
 try {
   await launch()
@@ -130,6 +148,9 @@ try {
   await expect(chinesePreference.locator('option[value="system"]')).toHaveText('跟随系统')
   await expect(chinesePreference.locator('option[value="en"]')).toHaveText('English')
   await expect(chinesePreference.locator('option[value="zh-CN"]')).toHaveText('简体中文')
+  for (const [locale, labels] of Object.entries(addedLocales)) {
+    await expect(chinesePreference.locator(`option[value="${locale}"]`)).toHaveText(labels.label)
+  }
   await page.evaluate(() => document.fonts.ready)
   await page.screenshot({path: path.join(evidence, `${packageForm}-language.png`), animations: 'disabled'})
   await page.setViewportSize({width: 650, height: 540})
@@ -161,7 +182,30 @@ try {
   await expect(chineseFind.getByRole('status')).toHaveText('第 1 项，共 1 项')
   await page.screenshot({path: path.join(evidence, `${packageForm}-chinese.png`), animations: 'disabled'})
   await chineseFind.getByRole('button', {name: '关闭查找栏'}).click()
-  await (await openLanguageSettings(true)).selectOption('en')
+  await chineseEditor.focus()
+  await page.keyboard.press('Home')
+  await page.keyboard.insertText('草稿 ')
+  await openLanguageSettings(true)
+  for (const [locale, labels] of Object.entries(addedLocales)) {
+    await page.locator('dialog select').first().selectOption(locale)
+    await expect(html).toHaveAttribute('lang', locale)
+    await expect(settingsLanguage(locale)).toHaveValue(locale)
+    await expect(settingsLanguage(locale)).toBeFocused()
+    await expect(settingsLanguage(locale).locator('option[value="system"]')).toHaveText(labels.system)
+    await expectSavedLanguage(locale)
+    const faceLoaded = await page.evaluate(async ({font, glyphs}) => {
+      const faces = await document.fonts.load(`14px "${font}"`, glyphs)
+      return faces.length === 1 && faces[0].status === 'loaded'
+    }, {font: labels.font, glyphs: labels.glyphs})
+    assert.ok(faceLoaded, `Offline font loads for ${locale}`)
+    await page.evaluate(() => document.fonts.ready)
+    await page.screenshot({path: path.join(evidence, `${packageForm}-${locale}.png`), animations: 'disabled'})
+    await page.setViewportSize({width: 650, height: 540})
+    const overflow = await page.getByRole('dialog').evaluate(element => element.scrollWidth - element.clientWidth)
+    assert.equal(overflow, 0, `Settings fits a narrow window in ${locale}`)
+    await page.setViewportSize({width: 1024, height: 720})
+  }
+  await settingsLanguage('ko').selectOption('en')
   await expect(englishPreference).toHaveValue('en')
   await page.keyboard.press('Escape')
   await expect(englishFile).toBeVisible()
@@ -171,6 +215,9 @@ try {
   const editor = page.getByRole('textbox', {name: 'Document editor'})
   const tab = page.getByRole('tab', {name: 'offline.txt', exact: true})
   const status = page.getByLabel('Document status')
+  await expect(editor).toHaveText('草稿 original')
+  await toolbar.getByRole('button', {name: 'Undo', exact: true}).click()
+  await expect(editor).toHaveText('original')
   await expect(tab).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('button', {name: 'CRLF', exact: true})).toBeVisible()
   await expect(page.getByRole('button', {name: 'UTF-8', exact: true})).toBeVisible()
@@ -253,21 +300,50 @@ try {
       throw error
     }
   }).toEqual({text: 'local edit\n中🙂\ncopy this', dirty: false})
+
+  await (await openLanguageSettings(false)).selectOption('zh-TW')
+  await expectSavedLanguage('zh-TW')
+  await page.keyboard.press('Escape')
   await shutdown()
-  await launch()
-  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
-  await expect(page.getByRole('button', {name: 'File', exact: true})).toBeVisible()
+  await launch('ja-JP')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-TW')
   await expect(page.locator('.cm-line')).toHaveText(['local edit', '中🙂', 'copy this'])
-  const remembered = await openLanguageSettings(false)
-  await expect(remembered).toHaveValue('en')
-  await remembered.selectOption('system')
-  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
-  await expect(page.getByRole('combobox', {name: '界面语言', exact: true})).toHaveValue('system')
+  await verifyLocalizedFind('zh-TW')
+  const traditional = await openAddedSettings('zh-TW', '偏好設定…')
+  await expect(traditional).toHaveValue('zh-TW')
+  await traditional.selectOption('system')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
+  await expect(settingsLanguage('ja')).toHaveValue('system')
+  await expectSavedLanguage('system')
+  await page.keyboard.press('Escape')
+  await verifyLocalizedFind('ja')
+  await shutdown()
+  await launch('ko-KR')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko')
+  await verifyLocalizedFind('ko')
+  const korean = await openAddedSettings('ko', '환경 설정…')
+  await expect(korean).toHaveValue('system')
+  await korean.selectOption('ja')
+  await expectSavedLanguage('ja')
+  await shutdown()
+  await launch('fr-CA')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
+  const japanese = await openAddedSettings('ja', '環境設定…')
+  await expect(japanese).toHaveValue('ja')
+  await japanese.selectOption('system')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  await expect(page.getByRole('combobox', {name: 'Interface language', exact: true})).toHaveValue('system')
+  await expectSavedLanguage('system')
+  await shutdown()
+  await launch('zh-Hant-HK')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-TW')
+  await expect(page.getByRole('textbox', {name: addedLocales['zh-TW'].editor, exact: true})).toBeVisible()
   assert.deepEqual(pageErrors, [])
   await fs.writeFile(path.join(evidence, `${packageForm}.json`), JSON.stringify({
     platform: process.platform,
     arch: process.arch,
     packageForm,
+    interfaceLocales: ['en', 'ja', 'ko', 'zh-CN', 'zh-TW'],
     offline: 'Chromium used a loopback-only proxy and renderer HTTP(S) requests were blocked',
     passed: ['desktop layout', 'narrow window', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'CRLF save', 'find and replace', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence'],
   }, null, 2) + '\n')
@@ -280,4 +356,22 @@ try {
   await shutdown()
   await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
   clearTimeout(watchdog)
+}
+
+async function openAddedSettings(locale, preferences) {
+  await page.getByRole('navigation').getByRole('button', {name: addedLocales[locale].settings, exact: true}).click()
+  await page.getByRole('button', {name: new RegExp(`^${preferences}`)}).click()
+  return settingsLanguage(locale)
+}
+
+async function verifyLocalizedFind(locale) {
+  const labels = addedLocales[locale]
+  await expect(page.getByRole('textbox', {name: labels.editor, exact: true})).toBeVisible()
+  await page.getByRole('toolbar').getByRole('button', {name: labels.replace, exact: true}).click()
+  const region = page.getByRole('region', {name: labels.search, exact: true})
+  const find = region.getByRole('textbox', {name: labels.find, exact: true})
+  await expect(find).toBeFocused()
+  await find.fill('copy this')
+  await expect(page.locator('.search-hit')).toHaveText('copy this')
+  await region.getByRole('button', {name: labels.closeFind, exact: true}).click()
 }

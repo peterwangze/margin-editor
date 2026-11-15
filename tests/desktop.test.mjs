@@ -43,15 +43,23 @@ test('L01 defaults to the native OS language and handles a profile from 1.0', {t
   assert.deepEqual(systemLanguages, native)
   const expected = interfaceLocale('system', native)
   await expect(page.locator('html')).toHaveAttribute('lang', expected)
-  await expect(page.getByRole('textbox', {name: expected === 'zh-CN' ? '文档编辑器' : 'Document editor'})).toBeVisible()
+  const editorLabels = {en: 'Document editor', 'zh-CN': '文档编辑器', 'zh-TW': '文件編輯器', ja: '文書エディター', ko: '문서 편집기'}
+  await expect(page.getByRole('textbox', {name: editorLabels[expected]})).toBeVisible()
   if (process.platform === 'darwin') {
-    await page.evaluate(() => window.margin.setInterfaceLanguage('zh-CN'))
-    const nativeMenu = await app.evaluate(({Menu}) => Menu.getApplicationMenu().items.map(item => ({
-      label: item.label,
-      labels: item.submenu?.items.map(subitem => subitem.label) ?? [],
-    })))
-    assert.ok(nativeMenu.some(item => item.label === '编辑' && item.labels.includes('撤销')))
-    assert.ok(nativeMenu.some(item => item.labels.includes('退出 Margin')))
+    for (const [locale, edit, undo, quit] of [
+      ['zh-CN', '编辑', '撤销', '退出 Margin'],
+      ['zh-TW', '編輯', '復原', '結束 Margin'],
+      ['ja', '編集', '取り消す', 'Margin を終了'],
+      ['ko', '편집', '실행 취소', 'Margin 종료'],
+    ]) {
+      await page.evaluate(value => window.margin.setInterfaceLanguage(value), locale)
+      const nativeMenu = await app.evaluate(({Menu}) => Menu.getApplicationMenu().items.map(item => ({
+        label: item.label,
+        labels: item.submenu?.items.map(subitem => subitem.label) ?? [],
+      })))
+      assert.ok(nativeMenu.some(item => item.label === edit && item.labels.includes(undo)), locale)
+      assert.ok(nativeMenu.some(item => item.labels.includes(quit)), locale)
+    }
   }
 })
 
