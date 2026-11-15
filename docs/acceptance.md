@@ -60,6 +60,19 @@ F01–F12 是早期迁移对照，保留子项和历史结果。当前产品承�
 
 安装包的 CI 通过表示已生成工件，带 Smoke 步骤的架构还验证了包内应用的真实编辑与磁盘操作。完整安装程序、系统文件关联和卸载用例需要独立证据。
 
+## v1.4.0 执行记录
+
+发行提交 `5b4246d2b1e9f73b46f6af946bfda045a1f4b9ed`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43724167835) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43725284776) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.4.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.4.0/ACCEPTANCE.zip)
+
+| 范围 | 状态 | 已观察的结果 |
+| --- | --- | --- |
+| G01–G04 | 通过 | Windows、macOS、Linux 的 x64 和 ARM64 分别通过元数据、运行时和两种离线包格式检查。12 个包均实际启动并完成编辑、查找替换、清理、撤销与保存，核对了文件字节。每组通过 13 项核心和 11 项桌面用例，Linux x64 另通过 11 项浏览器用例。 |
+| G06 系统语言 | 通过 | 六组原生环境比对首次启动语言与操作系统偏好。包内受控用例覆盖原有语言以及 `it-IT`、`pt-BR`、`pt-PT`、`ru-RU` 和英文回退。 |
+| G06 界面与持久化 | 通过 | 各包通过 11 种语言的切换、草稿与焦点保留及重启恢复。意大利语、葡萄牙语和俄语在 650、760、901、1024 像素宽度通过菜单和查找栏检查，实际完成查找、替换和撤销。俄文界面与等宽字体可离线加载，切换后旧语言提示消失。macOS 两种架构通过原生菜单检查。 |
+| G05 | 通过 | GitHub Latest 为正式版，12 个离线包与两个验收文件均可公开下载。清单的 13 条 SHA-256 与资产摘要一致。验收档案含 12 份包报告，以及三种新语言的 72 张设置与查找截图。 |
+
+巴西和葡萄牙的系统区域设置共用巴西葡萄牙语译文。标准文件对话框的控件使用操作系统语言。Windows 包为未签名构建，macOS 包采用临时签名。Linux AppImage 以无 FUSE 的解包方式验收。
+
 ## v1.3.0 执行记录
 
 发行提交 `4ba53dc3a0cd6c06b4702c4cd29d50580ab2daeb`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43718151502) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43719158247) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.3.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.3.0/ACCEPTANCE.zip)
