@@ -7,6 +7,9 @@ import panelsChinese from './locales/panels.zh-CN.js'
 import traditionalChinese from './locales/zh-TW.js'
 import japanese from './locales/ja.js'
 import korean from './locales/ko.js'
+import french from './locales/fr.js'
+import german from './locales/de.js'
+import spanish from './locales/es.js'
 
 export {interfaceLanguages} from '../shared/locale.mjs'
 
@@ -15,6 +18,9 @@ const translations = {
   'zh-TW': traditionalChinese,
   ja: japanese,
   ko: korean,
+  fr: french,
+  de: german,
+  es: spanish,
 }
 const LocaleContext = createContext(null)
 const storageKey = 'margin.ui-language'

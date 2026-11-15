@@ -106,7 +106,91 @@ const korean = {
   close: '닫기',
 }
 
-const nativeLabels = new Map([['zh-CN', simplified], ['zh-TW', traditional], ['ja', japanese], ['ko', korean]])
+const french = {
+  saveDocument: 'Enregistrer le document',
+  about: 'À propos de Margin',
+  services: 'Services',
+  hide: 'Masquer Margin',
+  hideOthers: 'Masquer les autres',
+  unhide: 'Tout afficher',
+  quit: 'Quitter Margin',
+  editMenu: 'Édition',
+  undo: 'Annuler',
+  redo: 'Rétablir',
+  cut: 'Couper',
+  copy: 'Copier',
+  paste: 'Coller',
+  pasteAndMatchStyle: 'Coller et adapter le style',
+  delete: 'Supprimer',
+  selectAll: 'Tout sélectionner',
+  startSpeaking: 'Commencer la lecture',
+  stopSpeaking: 'Arrêter la lecture',
+  speech: 'Parole',
+  windowMenu: 'Fenêtre',
+  minimize: 'Réduire',
+  zoom: 'Zoom',
+  front: 'Tout placer au premier plan',
+  close: 'Fermer',
+}
+
+const german = {
+  saveDocument: 'Dokument speichern',
+  about: 'Über Margin',
+  services: 'Dienste',
+  hide: 'Margin ausblenden',
+  hideOthers: 'Andere ausblenden',
+  unhide: 'Alle einblenden',
+  quit: 'Margin beenden',
+  editMenu: 'Bearbeiten',
+  undo: 'Rückgängig',
+  redo: 'Wiederholen',
+  cut: 'Ausschneiden',
+  copy: 'Kopieren',
+  paste: 'Einsetzen',
+  pasteAndMatchStyle: 'Einsetzen und Stil anpassen',
+  delete: 'Löschen',
+  selectAll: 'Alles auswählen',
+  startSpeaking: 'Sprachausgabe starten',
+  stopSpeaking: 'Sprachausgabe stoppen',
+  speech: 'Sprachausgabe',
+  windowMenu: 'Fenster',
+  minimize: 'Minimieren',
+  zoom: 'Zoomen',
+  front: 'Alle nach vorne bringen',
+  close: 'Schließen',
+}
+
+const spanish = {
+  saveDocument: 'Guardar documento',
+  about: 'Acerca de Margin',
+  services: 'Servicios',
+  hide: 'Ocultar Margin',
+  hideOthers: 'Ocultar otras apps',
+  unhide: 'Mostrar todo',
+  quit: 'Salir de Margin',
+  editMenu: 'Edición',
+  undo: 'Deshacer',
+  redo: 'Rehacer',
+  cut: 'Cortar',
+  copy: 'Copiar',
+  paste: 'Pegar',
+  pasteAndMatchStyle: 'Pegar con el mismo estilo',
+  delete: 'Eliminar',
+  selectAll: 'Seleccionar todo',
+  startSpeaking: 'Iniciar lectura',
+  stopSpeaking: 'Detener lectura',
+  speech: 'Texto a voz',
+  windowMenu: 'Ventana',
+  minimize: 'Minimizar',
+  zoom: 'Zoom',
+  front: 'Traer todo al frente',
+  close: 'Cerrar',
+}
+
+const nativeLabels = new Map([
+  ['zh-CN', simplified], ['zh-TW', traditional], ['ja', japanese], ['ko', korean],
+  ['fr', french], ['de', german], ['es', spanish],
+])
 
 function saveDialogTitle(locale) {
   return nativeLabels.get(locale)?.saveDocument ?? 'Save document'

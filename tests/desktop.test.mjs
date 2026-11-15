@@ -43,7 +43,10 @@ test('L01 defaults to the native OS language and handles a profile from 1.0', {t
   assert.deepEqual(systemLanguages, native)
   const expected = interfaceLocale('system', native)
   await expect(page.locator('html')).toHaveAttribute('lang', expected)
-  const editorLabels = {en: 'Document editor', 'zh-CN': '文档编辑器', 'zh-TW': '文件編輯器', ja: '文書エディター', ko: '문서 편집기'}
+  const editorLabels = {
+    en: 'Document editor', 'zh-CN': '文档编辑器', 'zh-TW': '文件編輯器', ja: '文書エディター', ko: '문서 편집기',
+    fr: 'Éditeur de documents', de: 'Dokumenteditor', es: 'Editor de documentos',
+  }
   await expect(page.getByRole('textbox', {name: editorLabels[expected]})).toBeVisible()
   if (process.platform === 'darwin') {
     for (const [locale, edit, undo, quit] of [
@@ -51,6 +54,9 @@ test('L01 defaults to the native OS language and handles a profile from 1.0', {t
       ['zh-TW', '編輯', '復原', '結束 Margin'],
       ['ja', '編集', '取り消す', 'Margin を終了'],
       ['ko', '편집', '실행 취소', 'Margin 종료'],
+      ['fr', 'Édition', 'Annuler', 'Quitter Margin'],
+      ['de', 'Bearbeiten', 'Rückgängig', 'Margin beenden'],
+      ['es', 'Edición', 'Deshacer', 'Salir de Margin'],
     ]) {
       await page.evaluate(value => window.margin.setInterfaceLanguage(value), locale)
       const nativeMenu = await app.evaluate(({Menu}) => Menu.getApplicationMenu().items.map(item => ({

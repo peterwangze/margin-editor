@@ -28,6 +28,9 @@ const addedLocales = {
   'zh-TW': {label: '繁體中文', settings: '設定', preference: '介面語言', system: '跟隨系統', editor: '文件編輯器', search: '尋找與取代', find: '尋找', replace: '取代', closeFind: '關閉尋找列', font: 'Margin Traditional', glyphs: '檔案與儲存'},
   ja: {label: '日本語', settings: '設定', preference: '表示言語', system: 'システム設定に従う', editor: '文書エディター', search: '検索と置換', find: '検索', replace: '置換', closeFind: '検索バーを閉じる', font: 'Margin Japanese', glyphs: '日本語を探す'},
   ko: {label: '한국어', settings: '설정', preference: '인터페이스 언어', system: '시스템 설정 따르기', editor: '문서 편집기', search: '찾기 및 바꾸기', find: '찾기', replace: '바꾸기', closeFind: '찾기 닫기', font: 'Margin Korean', glyphs: '한글 찾기'},
+  fr: {label: 'Français', settings: 'Paramètres', preference: 'Langue de l’interface', system: 'Langue du système', editor: 'Éditeur de documents', search: 'Rechercher et remplacer', find: 'Rechercher', replace: 'Remplacer', closeFind: 'Fermer la barre de recherche', font: 'Instrument Sans', glyphs: 'Éléments œ'},
+  de: {label: 'Deutsch', settings: 'Einstellungen', preference: 'Oberflächensprache', system: 'Systemsprache verwenden', editor: 'Dokumenteditor', search: 'Suchen und ersetzen', find: 'Suchen', replace: 'Ersetzen', closeFind: 'Suche schließen', font: 'Instrument Sans', glyphs: 'Änderungen ß'},
+  es: {label: 'Español', settings: 'Configuración', preference: 'Idioma de la interfaz', system: 'Usar el idioma del sistema', editor: 'Editor de documentos', search: 'Buscar y reemplazar', find: 'Buscar', replace: 'Reemplazar', closeFind: 'Cerrar la barra de búsqueda', font: 'Instrument Sans', glyphs: 'Español ¿'},
 }
 
 function stopApplication(force = false) {
@@ -201,11 +204,14 @@ try {
     await page.evaluate(() => document.fonts.ready)
     await page.screenshot({path: path.join(evidence, `${packageForm}-${locale}.png`), animations: 'disabled'})
     await page.setViewportSize({width: 650, height: 540})
-    const overflow = await page.getByRole('dialog').evaluate(element => element.scrollWidth - element.clientWidth)
+    const dialog = page.getByRole('dialog')
+    const overflow = await dialog.evaluate(element => element.scrollWidth - element.clientWidth)
     assert.equal(overflow, 0, `Settings fits a narrow window in ${locale}`)
+    const checkboxWidths = await dialog.getByRole('checkbox').evaluateAll(boxes => boxes.map(box => box.getBoundingClientRect().width))
+    assert.ok(checkboxWidths.length > 0 && checkboxWidths.every(width => width >= 12), `Settings checkboxes have room in ${locale}`)
     await page.setViewportSize({width: 1024, height: 720})
   }
-  await settingsLanguage('ko').selectOption('en')
+  await settingsLanguage('es').selectOption('en')
   await expect(englishPreference).toHaveValue('en')
   await page.keyboard.press('Escape')
   await expect(englishFile).toBeVisible()
@@ -326,7 +332,7 @@ try {
   await korean.selectOption('ja')
   await expectSavedLanguage('ja')
   await shutdown()
-  await launch('fr-CA')
+  await launch('it-IT')
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
   const japanese = await openAddedSettings('ja', '環境設定…')
   await expect(japanese).toHaveValue('ja')
@@ -338,12 +344,37 @@ try {
   await launch('zh-Hant-HK')
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-TW')
   await expect(page.getByRole('textbox', {name: addedLocales['zh-TW'].editor, exact: true})).toBeVisible()
+  await shutdown()
+  await launch('fr-CA')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+  await verifyNarrowLocalizedFind('fr')
+  const french = await openAddedSettings('fr', 'Préférences…')
+  await expect(french).toHaveValue('system')
+  await french.selectOption('de')
+  await expectSavedLanguage('de')
+  await shutdown()
+  await launch('es-MX')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'de')
+  await expect(page.locator('.cm-line')).toHaveText(['local edit', '中🙂', 'copy this'])
+  await verifyNarrowLocalizedFind('de')
+  const german = await openAddedSettings('de', 'Einstellungen…')
+  await expect(german).toHaveValue('de')
+  await german.selectOption('system')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+  await expect(settingsLanguage('es')).toHaveValue('system')
+  await expectSavedLanguage('system')
+  await page.keyboard.press('Escape')
+  await verifyNarrowLocalizedFind('es')
+  await shutdown()
+  await launch('de-CH')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'de')
+  await expect(page.getByRole('textbox', {name: addedLocales.de.editor, exact: true})).toBeVisible()
   assert.deepEqual(pageErrors, [])
   await fs.writeFile(path.join(evidence, `${packageForm}.json`), JSON.stringify({
     platform: process.platform,
     arch: process.arch,
     packageForm,
-    interfaceLocales: ['en', 'ja', 'ko', 'zh-CN', 'zh-TW'],
+    interfaceLocales: ['en', 'zh-CN', ...Object.keys(addedLocales)],
     offline: 'Chromium used a loopback-only proxy and renderer HTTP(S) requests were blocked',
     passed: ['desktop layout', 'narrow window', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'CRLF save', 'find and replace', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence'],
   }, null, 2) + '\n')
@@ -364,7 +395,7 @@ async function openAddedSettings(locale, preferences) {
   return settingsLanguage(locale)
 }
 
-async function verifyLocalizedFind(locale) {
+async function verifyLocalizedFind(locale, beforeClose) {
   const labels = addedLocales[locale]
   await expect(page.getByRole('textbox', {name: labels.editor, exact: true})).toBeVisible()
   await page.getByRole('toolbar').getByRole('button', {name: labels.replace, exact: true}).click()
@@ -373,5 +404,26 @@ async function verifyLocalizedFind(locale) {
   await expect(find).toBeFocused()
   await find.fill('copy this')
   await expect(page.locator('.search-hit')).toHaveText('copy this')
+  await beforeClose?.(region)
   await region.getByRole('button', {name: labels.closeFind, exact: true}).click()
+}
+
+async function verifyNarrowLocalizedFind(locale) {
+  await page.evaluate(() => document.fonts.ready)
+  await page.setViewportSize({width: 650, height: 540})
+  await verifyLocalizedFind(locale, async region => {
+    const menu = page.getByRole('navigation')
+    for (const width of [1024, 901, 760, 650]) {
+      await page.setViewportSize({width, height: 540})
+      for (const [element, label] of [[menu, 'menu'], [region, 'find bar']]) {
+        const overflow = await element.evaluate(node => {
+          const right = Math.min(node.getBoundingClientRect().right, innerWidth)
+          return Math.max(...[...node.children].map(child => child.getBoundingClientRect().right - right), node.scrollWidth - node.clientWidth)
+        })
+        assert.ok(overflow <= 1, `The ${label} fits a ${width}px window in ${locale} (${overflow}px overflow)`)
+      }
+    }
+    await page.screenshot({path: path.join(evidence, `${packageForm}-find-${locale}.png`), animations: 'disabled'})
+  })
+  await page.setViewportSize({width: 1024, height: 720})
 }

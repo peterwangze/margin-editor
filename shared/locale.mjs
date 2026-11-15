@@ -4,6 +4,9 @@ export const interfaceLanguages = [
   {value: 'zh-TW', label: '繁體中文'},
   {value: 'ja', label: '日本語'},
   {value: 'ko', label: '한국어'},
+  {value: 'fr', label: 'Français'},
+  {value: 'de', label: 'Deutsch'},
+  {value: 'es', label: 'Español'},
 ]
 
 const supported = new Set(interfaceLanguages.map(({value}) => value))
