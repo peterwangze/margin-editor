@@ -31,6 +31,9 @@ const addedLocales = {
   fr: {label: 'Français', settings: 'Paramètres', preference: 'Langue de l’interface', system: 'Langue du système', editor: 'Éditeur de documents', search: 'Rechercher et remplacer', find: 'Rechercher', replace: 'Remplacer', closeFind: 'Fermer la barre de recherche', font: 'Instrument Sans', glyphs: 'Éléments œ'},
   de: {label: 'Deutsch', settings: 'Einstellungen', preference: 'Oberflächensprache', system: 'Systemsprache verwenden', editor: 'Dokumenteditor', search: 'Suchen und ersetzen', find: 'Suchen', replace: 'Ersetzen', closeFind: 'Suche schließen', font: 'Instrument Sans', glyphs: 'Änderungen ß'},
   es: {label: 'Español', settings: 'Configuración', preference: 'Idioma de la interfaz', system: 'Usar el idioma del sistema', editor: 'Editor de documentos', search: 'Buscar y reemplazar', find: 'Buscar', replace: 'Reemplazar', closeFind: 'Cerrar la barra de búsqueda', font: 'Instrument Sans', glyphs: 'Español ¿'},
+  it: {label: 'Italiano', settings: 'Impostazioni', preference: 'Lingua dell’interfaccia', system: 'Segui la lingua di sistema', editor: 'Editor di documenti', search: 'Trova e sostituisci', find: 'Trova', replace: 'Sostituisci', closeFind: 'Chiudi ricerca', replaceAll: 'Sostituisci tutto', undo: 'Annulla', font: 'Instrument Sans', glyphs: 'Già perché'},
+  pt: {label: 'Português', settings: 'Configurações', preference: 'Idioma da interface', system: 'Usar idioma do sistema', editor: 'Editor de documentos', search: 'Localizar e substituir', find: 'Localizar', replace: 'Substituir', closeFind: 'Fechar barra de pesquisa', replaceAll: 'Substituir tudo', undo: 'Desfazer', font: 'Instrument Sans', glyphs: 'Edição e ação'},
+  ru: {label: 'Русский', settings: 'Настройки', preference: 'Язык интерфейса', system: 'Как в системе', editor: 'Редактор документов', search: 'Поиск и замена', find: 'Найти', replace: 'Заменить', closeFind: 'Закрыть панель поиска', replaceAll: 'Заменить всё', undo: 'Отменить', font: 'Noto Sans', glyphs: 'Привет, мир! Ёж № 1'},
 }
 
 function stopApplication(force = false) {
@@ -201,6 +204,17 @@ try {
       return faces.length === 1 && faces[0].status === 'loaded'
     }, {font: labels.font, glyphs: labels.glyphs})
     assert.ok(faceLoaded, `Offline font loads for ${locale}`)
+    if (locale === 'ru') {
+      const cyrillicFacesLoaded = await page.evaluate(async glyphs => {
+        const [semibold, monospace] = await Promise.all([
+          document.fonts.load('600 14px "Noto Sans"', glyphs),
+          document.fonts.load('15px "IBM Plex Mono"', glyphs),
+        ])
+        const loadedCyrillic = faces => faces.some(face => face.status === 'loaded' && /400-45f/i.test(face.unicodeRange))
+        return loadedCyrillic(semibold) && loadedCyrillic(monospace)
+      }, labels.glyphs)
+      assert.ok(cyrillicFacesLoaded, 'Bundled Cyrillic interface and editor fonts load offline')
+    }
     await page.evaluate(() => document.fonts.ready)
     await page.screenshot({path: path.join(evidence, `${packageForm}-${locale}.png`), animations: 'disabled'})
     await page.setViewportSize({width: 650, height: 540})
@@ -211,7 +225,7 @@ try {
     assert.ok(checkboxWidths.length > 0 && checkboxWidths.every(width => width >= 12), `Settings checkboxes have room in ${locale}`)
     await page.setViewportSize({width: 1024, height: 720})
   }
-  await settingsLanguage('es').selectOption('en')
+  await settingsLanguage('ru').selectOption('en')
   await expect(englishPreference).toHaveValue('en')
   await page.keyboard.press('Escape')
   await expect(englishFile).toBeVisible()
@@ -332,7 +346,7 @@ try {
   await korean.selectOption('ja')
   await expectSavedLanguage('ja')
   await shutdown()
-  await launch('it-IT')
+  await launch('nl-NL')
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
   const japanese = await openAddedSettings('ja', '環境設定…')
   await expect(japanese).toHaveValue('ja')
@@ -369,6 +383,35 @@ try {
   await launch('de-CH')
   await expect(page.locator('html')).toHaveAttribute('lang', 'de')
   await expect(page.getByRole('textbox', {name: addedLocales.de.editor, exact: true})).toBeVisible()
+  await (await openAddedSettings('de', 'Einstellungen…')).selectOption('ru')
+  await expectSavedLanguage('ru')
+  await shutdown()
+  await launch('it-IT')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ru')
+  await expect(page.locator('.cm-line')).toHaveText(['local edit', '中🙂', 'copy this'])
+  await verifyNarrowLocalizedFind('ru', 'Привет, мир! Ёж № 1')
+  await expect(page.locator('.toast')).toContainText('Заменено совпадений: 1.')
+  const russian = await openAddedSettings('ru', 'Параметры…')
+  await expect(russian).toHaveValue('ru')
+  await russian.selectOption('system')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'it')
+  await expect(page.locator('.toast')).toHaveCount(0)
+  await expect(settingsLanguage('it')).toHaveValue('system')
+  await expectSavedLanguage('system')
+  await page.keyboard.press('Escape')
+  await verifyNarrowLocalizedFind('it', 'Perché è già qui')
+  await shutdown()
+  await launch('pt-PT')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'pt')
+  await verifyNarrowLocalizedFind('pt', 'Edição e ação')
+  await shutdown()
+  await launch('pt-BR')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'pt')
+  await expect(page.getByRole('textbox', {name: addedLocales.pt.editor, exact: true})).toBeVisible()
+  await shutdown()
+  await launch('ru-RU')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ru')
+  await expect(page.getByRole('textbox', {name: addedLocales.ru.editor, exact: true})).toBeVisible()
   assert.deepEqual(pageErrors, [])
   await fs.writeFile(path.join(evidence, `${packageForm}.json`), JSON.stringify({
     platform: process.platform,
@@ -376,7 +419,7 @@ try {
     packageForm,
     interfaceLocales: ['en', 'zh-CN', ...Object.keys(addedLocales)],
     offline: 'Chromium used a loopback-only proxy and renderer HTTP(S) requests were blocked',
-    passed: ['desktop layout', 'narrow window', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'CRLF save', 'find and replace', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence'],
+    passed: ['desktop layout', 'narrow window', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'bundled Cyrillic fonts', 'CRLF save', 'find and replace', 'localized replacement and undo', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence'],
   }, null, 2) + '\n')
   console.log(`${packageForm}: layout, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup, undo and interface language persistence passed`)
 } catch (error) {
@@ -408,7 +451,8 @@ async function verifyLocalizedFind(locale, beforeClose) {
   await region.getByRole('button', {name: labels.closeFind, exact: true}).click()
 }
 
-async function verifyNarrowLocalizedFind(locale) {
+async function verifyNarrowLocalizedFind(locale, replacement) {
+  const labels = addedLocales[locale]
   await page.evaluate(() => document.fonts.ready)
   await page.setViewportSize({width: 650, height: 540})
   await verifyLocalizedFind(locale, async region => {
@@ -423,7 +467,19 @@ async function verifyNarrowLocalizedFind(locale) {
         assert.ok(overflow <= 1, `The ${label} fits a ${width}px window in ${locale} (${overflow}px overflow)`)
       }
     }
+    const replaceAll = replacement && region.getByRole('button', {name: labels.replaceAll, exact: true})
+    if (replaceAll) {
+      await region.getByRole('textbox', {name: labels.replace, exact: true}).fill(replacement)
+      await expect(replaceAll).toBeEnabled()
+    }
     await page.screenshot({path: path.join(evidence, `${packageForm}-find-${locale}.png`), animations: 'disabled'})
+    if (replaceAll) await replaceAll.click()
   })
+  if (replacement) {
+    const lastLine = page.locator('.cm-line').last()
+    await expect(lastLine).toHaveText(replacement)
+    await page.getByRole('toolbar').getByRole('button', {name: labels.undo, exact: true}).click()
+    await expect(lastLine).toHaveText('copy this')
+  }
   await page.setViewportSize({width: 1024, height: 720})
 }

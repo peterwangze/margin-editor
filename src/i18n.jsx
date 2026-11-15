@@ -10,6 +10,9 @@ import korean from './locales/ko.js'
 import french from './locales/fr.js'
 import german from './locales/de.js'
 import spanish from './locales/es.js'
+import italian from './locales/it.js'
+import portuguese from './locales/pt.js'
+import russian from './locales/ru.js'
 
 export {interfaceLanguages} from '../shared/locale.mjs'
 
@@ -21,6 +24,9 @@ const translations = {
   fr: french,
   de: german,
   es: spanish,
+  it: italian,
+  pt: portuguese,
+  ru: russian,
 }
 const LocaleContext = createContext(null)
 const storageKey = 'margin.ui-language'

@@ -37,10 +37,15 @@ function download(name, content) {
 }
 
 function App() {
-  const {t, formatNumber} = useLocale()
+  const {t, locale, formatNumber} = useLocale()
   const [notice, setNotice] = useState(null)
   const noticeTimer = useRef(null)
-  const notify = message => { setNotice(String(message)); clearTimeout(noticeTimer.current); noticeTimer.current = setTimeout(() => setNotice(null), 4300) }
+  const notify = message => {
+    setNotice({text: String(message), locale})
+    clearTimeout(noticeTimer.current)
+    noticeTimer.current = setTimeout(() => setNotice(null), 4300)
+  }
+  useEffect(() => { setNotice(current => current?.locale === locale ? current : null) }, [locale])
   const m = useDocuments(api, notify)
   const find = useFind(m.doc, m.selectedView, notify)
   const [panel, setPanel] = useState('')
@@ -325,7 +330,7 @@ function App() {
     <input type="file" multiple ref={m.fileInput} hidden onChange={event => { const files = [...event.target.files]; event.target.value = ''; safe(() => m.openBrowser(files)) }} />
     <input type="file" ref={importInput} hidden onChange={event => { const file = event.target.files[0]; event.target.value = ''; safe(() => importFile(file)) }} />
     <pre id="print-sheet" />
-    {notice && <div className="toast" role="status">{notice}<IconButton icon={X} label={t('Dismiss notification')} onClick={() => setNotice(null)} /></div>}
+    {notice?.locale === locale && <div className="toast" role="status">{notice.text}<IconButton icon={X} label={t('Dismiss notification')} onClick={() => setNotice(null)} /></div>}
     {drag && <div className="drop-overlay">{t('Drop to open files or a folder')}</div>}
     {context && <div className="context-overlay" onPointerDown={() => setContext(null)}><div className="menu-items context-menu" style={{left: Math.min(context.x, window.innerWidth - 210), top: Math.min(context.y, window.innerHeight - 180)}} onPointerDown={event => event.stopPropagation()}>
       <button onClick={() => {m.amend(context.doc.id, {pinned: !context.doc.pinned}); setContext(null)}}>{t(context.doc.pinned ? 'Unpin tab' : 'Pin tab')}</button><button onClick={() => {safe(() => m.save(context.doc.id)); setContext(null)}}>{t('Save')}</button><button onClick={() => {safe(() => m.close([context.doc.id])); setContext(null)}}>{t('Close')}</button><button onClick={() => {safe(() => m.close(m.docs.filter(item => item.id !== context.doc.id && !item.pinned).map(item => item.id))); setContext(null)}}>{t('Close other tabs')}</button>

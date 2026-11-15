@@ -7,6 +7,9 @@ export const interfaceLanguages = [
   {value: 'fr', label: 'Français'},
   {value: 'de', label: 'Deutsch'},
   {value: 'es', label: 'Español'},
+  {value: 'it', label: 'Italiano'},
+  {value: 'pt', label: 'Português'},
+  {value: 'ru', label: 'Русский'},
 ]
 
 const supported = new Set(interfaceLanguages.map(({value}) => value))

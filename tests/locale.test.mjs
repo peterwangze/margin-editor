@@ -11,24 +11,32 @@ import korean from '../src/locales/ko.js'
 import french from '../src/locales/fr.js'
 import german from '../src/locales/de.js'
 import spanish from '../src/locales/es.js'
+import italian from '../src/locales/it.js'
+import portuguese from '../src/locales/pt.js'
+import russian from '../src/locales/ru.js'
 
 test('interface language honors explicit choices and ordered OS preferences', () => {
   assert.equal(interfaceLocale('en', ['zh-Hans-CN']), 'en')
   assert.equal(interfaceLocale('zh-CN', ['en-US']), 'zh-CN')
-  assert.equal(interfaceLocale('system', ['it-IT', 'zh-Hans-SG', 'en-US']), 'zh-CN')
+  assert.equal(interfaceLocale('system', ['nl-NL', 'zh-Hans-SG', 'en-US']), 'zh-CN')
   assert.equal(interfaceLocale('system', ['en-GB', 'zh-CN']), 'en')
   assert.equal(interfaceLocale('system', ['zh_CN.UTF-8']), 'zh-CN')
   assert.equal(interfaceLocale('system', ['zh-Hant-CN', 'zh-TW', 'de-DE']), 'zh-TW')
   assert.equal(interfaceLocale('system', ['zh-HK', 'zh-CN']), 'zh-TW')
   assert.equal(interfaceLocale('system', ['zh_MO.UTF-8']), 'zh-TW')
   assert.equal(interfaceLocale('system', ['zh-Hans-TW']), 'zh-CN')
-  assert.equal(interfaceLocale('system', ['it-IT', 'ja-JP', 'ko-KR']), 'ja')
+  assert.equal(interfaceLocale('system', ['nl-NL', 'ja-JP', 'ko-KR']), 'ja')
   assert.equal(interfaceLocale('system', ['ko_KR.UTF-8', 'en']), 'ko')
   assert.equal(interfaceLocale('system', ['fr-CA', 'de-DE', 'en']), 'fr')
-  assert.equal(interfaceLocale('system', ['it-IT', 'de_CH.UTF-8', 'fr-FR']), 'de')
+  assert.equal(interfaceLocale('system', ['nl-NL', 'de_CH.UTF-8', 'fr-FR']), 'de')
   assert.equal(interfaceLocale('system', ['es-MX', 'en-US']), 'es')
   assert.equal(interfaceLocale('system', ['es-419']), 'es')
-  assert.equal(interfaceLocale('system', [null, '', 'it-IT']), 'en')
+  assert.equal(interfaceLocale('system', ['nl-NL', 'it-IT', 'en-US']), 'it')
+  assert.equal(interfaceLocale('system', ['it-CH']), 'it')
+  assert.equal(interfaceLocale('system', ['pt-BR', 'pt-PT', 'en-US']), 'pt')
+  assert.equal(interfaceLocale('system', ['pt_PT.UTF-8']), 'pt')
+  assert.equal(interfaceLocale('system', ['ru-RU', 'en-US']), 'ru')
+  assert.equal(interfaceLocale('system', [null, '', 'nl-NL']), 'en')
   for (const {value} of interfaceLanguages) assert.equal(interfaceLocale(value, ['en-US', 'zh-CN']), value)
   assert.equal(languagePreference('unknown'), 'system')
 })
@@ -39,6 +47,7 @@ test('all translated locales cover the same messages and preserve named placehol
   const keys = Object.keys(simplified).sort()
   for (const [locale, dictionary] of Object.entries({
     'zh-CN': simplified, 'zh-TW': traditional, ja: japanese, ko: korean, fr: french, de: german, es: spanish,
+    it: italian, pt: portuguese, ru: russian,
   })) {
     assert.deepEqual(Object.keys(dictionary).sort(), keys, `${locale} message coverage`)
     for (const [source, translation] of Object.entries(dictionary)) {
