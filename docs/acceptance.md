@@ -60,6 +60,19 @@ F01–F12 是早期迁移对照，保留子项和历史结果。当前产品承�
 
 安装包的 CI 通过表示已生成工件，带 Smoke 步骤的架构还验证了包内应用的真实编辑与磁盘操作。完整安装程序、系统文件关联和卸载用例需要独立证据。
 
+## v1.3.0 执行记录
+
+发行提交 `4ba53dc3a0cd6c06b4702c4cd29d50580ab2daeb`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43718151502) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43719158247) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.3.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.3.0/ACCEPTANCE.zip)
+
+| 范围 | 状态 | 已观察的结果 |
+| --- | --- | --- |
+| G01–G04 | 通过 | Windows、macOS、Linux 的 x64 和 ARM64 分别通过包元数据、运行时和两种离线包格式检查。从 12 个包实际执行编辑、查找替换、清理、撤销与保存并核对文件字节。每组通过 13 项核心用例和 11 项桌面用例，Linux x64 另通过 11 项浏览器用例。 |
+| G06 系统语言 | 通过 | 六组原生环境的首次启动语言与实际系统偏好一致。各包的受控系统偏好覆盖原有语言、加拿大法语、瑞士德语、墨西哥西班牙语和英文回退。 |
+| G06 界面与持久化 | 通过 | 每个包通过八种界面语言切换、离线字体加载、设置焦点与未保存草稿保留、重启恢复手动选择及恢复跟随系统。法语、德语和西班牙语通过 650、760、901、1024 像素宽度的查找栏和菜单检查。macOS 两种架构通过原生菜单的本地化检查。 |
+| G05 | 通过 | GitHub Latest 为正式版。12 个离线包和两个验收文件可公开下载。验收档案含 12 份包报告及法语、德语和西班牙语的 72 张设置与查找截图。清单的 13 条 SHA-256 与已发布资产摘要一致。 |
+
+标准文件对话框的控件使用操作系统语言。Windows 包为未签名构建，macOS 包采用临时签名。Linux AppImage 以无 FUSE 的解包方式验收。
+
 ## v1.2.0 执行记录
 
 发行提交 `51eb134987d2389bc78f7a1d3871cb44bbc0e1f1`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43715662099) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43716697689) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.2.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.2.0/ACCEPTANCE.zip)
