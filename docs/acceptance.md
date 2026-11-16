@@ -61,6 +61,19 @@ F01–F12 是早期迁移对照，保留子项和历史结果。当前产品承�
 
 安装包的 CI 通过表示已生成工件，带 Smoke 步骤的架构还验证了包内应用的真实编辑与磁盘操作。完整安装程序、系统文件关联和卸载用例需要独立证据。
 
+## v1.6.0 执行记录
+
+发行提交 `40a3cfcae87d8e2ca8aa2b47111c73aa0f994732`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43801110687) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43802476667) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.6.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.6.0/ACCEPTANCE.zip)
+
+| 范围 | 状态 | 已观察的结果 |
+| --- | --- | --- |
+| G01–G04 | 通过 | Windows、macOS 和 Linux 的 x64、ARM64 各通过两种离线包的静态与交互检查。12 份包报告的标题栏和「关于 Margin」版本均为 `1.6.0`。六组各通过 17 项核心和 13 项桌面用例，Linux x64 另通过 11 项浏览器用例。长文件名在 650 像素视口内保留可点击的版本号。最新发行版和 GitHub 加星入口指向相应的 GitHub 页面。 |
+| G06 | 通过 | 14 种界面语言的切换与重启记忆通过。阿拉伯语窄窗仍完整显示从左到右排列的版本号，菜单与查找栏继续按从右到左布局。 |
+| G07 | 通过 | 桌面用例验证了两个更新入口、已是最新版、请求失败后重试、新版发行说明、匹配包下载、定位文件和保留未保存草稿。核心测试覆盖版本比较、平台与架构、缺少匹配包、完整性校验、同名保护和临时文件清理。本机使用较旧的版本号实测了 GitHub 上 v1.5.0 的 Windows x64 安装包下载和校验。v1.6.0 发布后，应用通过真实 GitHub 请求显示已是最新版。 |
+| G05 | 通过 | GitHub Latest 为正式版，12 个离线包和两个验收文件可公开下载。清单的 13 条 SHA-256 与发布资产摘要一致。 |
+
+首次 macOS 长文件名测试发现标题栏会撑宽，限制标题栏宽度后完整重跑六组验收。Windows 包为未签名构建，macOS 包采用临时签名。
+
 ## v1.5.0 执行记录
 
 发行提交 `53cc3e5e0f5462e894ab60f4189a9d678fd07989`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43780350537) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43781760766) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.5.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.5.0/ACCEPTANCE.zip)
