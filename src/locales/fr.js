@@ -296,6 +296,7 @@ export default {
   'Interpret disk bytes as': 'Encodage à la lecture',
   'Reopen reads the file without changing its bytes. Use Convert encoding to change the file format.': 'Rouvrir le fichier relit ses octets sans les modifier. Pour changer l’encodage du fichier, utilisez « Convertir l’encodage ».',
   'Select Language': 'Choisir la syntaxe',
+  'Automatic': 'Détection automatique',
   'Plain Text': 'Texte brut',
   'Custom language': 'Syntaxe personnalisée',
   'File extensions (space separated)': 'Extensions de fichier (séparées par des espaces)',

@@ -296,6 +296,7 @@ export default {
   'Interpret disk bytes as': '読み込み時の文字コード',
   'Reopen reads the file without changing its bytes. Use Convert encoding to change the file format.': '開き直してもファイルの内容は変わりません。保存時の文字コードを変えるには「文字コードを変換」を使ってください。',
   'Select Language': '構文を選択',
+  'Automatic': '自動判定',
   'Plain Text': 'プレーンテキスト',
   'Custom language': 'カスタム構文',
   'File extensions (space separated)': 'ファイル拡張子（スペース区切り）',

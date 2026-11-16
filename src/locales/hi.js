@@ -293,6 +293,7 @@ export default {
   'Interpret disk bytes as': 'फ़ाइल पढ़ने की एन्कोडिंग',
   'Reopen reads the file without changing its bytes. Use Convert encoding to change the file format.': 'फ़ाइल फिर खोलने से उसके बाइट नहीं बदलते। फ़ाइल का फ़ॉर्मैट बदलने के लिए «एन्कोडिंग बदलें» चुनें।',
   'Select Language': 'सिंटैक्स चुनें',
+  'Automatic': 'स्वतः पहचानें',
   'Plain Text': 'सादा पाठ',
   'Custom language': 'कस्टम सिंटैक्स',
   'File extensions (space separated)': 'फ़ाइल एक्सटेंशन (स्पेस से अलग करें)',

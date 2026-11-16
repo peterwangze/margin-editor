@@ -6,6 +6,7 @@ import {highlightTree, classHighlighter} from '@lezer/highlight'
 import {encodings} from '../shared/text.mjs'
 import {basename, demoDocuments, dirname, documentTitle, symbolsFor} from './documents'
 import {focusEditor, goTo, insertAtSelections, toggleOverwrite} from './editor'
+import {plainTextMode} from './syntax-mode'
 import {definitions, lineTransforms, menus, transforms} from './commands'
 import {useLocale, errorMessage} from './i18n'
 
@@ -228,7 +229,10 @@ export function useCommands(ctx) {
     convert: () => textDialog('Convert encoding', [field('encoding', 'Save as encoding', doc.encoding, {options: encodings})], ({encoding}) => setFormat(encoding), 'Save writes the new encoding after a lossless round-trip check.'),
     reinterpret: () => textDialog('Reopen with encoding', [field('encoding', 'Interpret disk bytes as', doc.encoding, {options: encodings})], ({encoding}) => m.reload(doc, encoding), 'Reopen reads the file without changing its bytes. Use Convert encoding to change the file format.'),
     lf: () => setFormat(null, 'LF'), crlf: () => setFormat(null, 'CRLF'), cr: () => setFormat(null, 'CR'),
-    language: () => pick('Select Language', [{id: 'Plain Text', label: t('Plain Text')}, ...[...languageNames, ...m.settings.languages.map(item => item.name)].map(id => ({id, label: id}))], item => m.amend(doc.id, {language: item.id})),
+    language: () => pick('Select Language', [
+      {id: '', label: t('Automatic')}, {id: plainTextMode, label: t('Plain Text')},
+      ...[...languageNames, ...m.settings.languages.map(item => item.name)].map(id => ({id, label: id})),
+    ], item => m.amend(doc.id, {language: item.id || undefined})),
     customLanguage: () => textDialog('Custom language', [field('name', 'Name', '', {required: true}), field('extensions', 'File extensions (space separated)', ''), field('keywords', 'Keywords', '', {type: 'textarea'}), field('comment', 'Line comment prefix', '#'), field('outline', 'Outline regex (optional)', '')], value => {
       if (value.outline) new RegExp(value.outline, 'u')
       setting({languages: [...m.settings.languages.filter(item => item.name !== value.name), value]})

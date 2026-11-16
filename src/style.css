@@ -97,10 +97,12 @@
   --selection: #544667;
   --focus-line: #211d2b;
   --token-key: #d2b5fa;
+  --token-keyword: #83c7ff;
   --token-string: #a2e9bf;
   --token-number: #f5b690;
-  --token-comment: #a8a1b4;
+  --token-comment: #c4bbd0;
   --token-blue: #acbdfb;
+  --token-invalid: #ffaaaa;
   --danger: #ff9d9f;
   --warning: #edbb87;
   --success: #a2e9bf;
@@ -135,10 +137,12 @@
   --selection: #e3d2f2;
   --focus-line: #f4eef9;
   --token-key: #6f3f9b;
+  --token-keyword: #0057b5;
   --token-string: #126344;
   --token-number: #934725;
-  --token-comment: #6c6477;
+  --token-comment: #5d5469;
   --token-blue: #3d54a2;
+  --token-invalid: var(--danger);
   --danger: #9a3442;
   --warning: #82502b;
   --success: #1a6b4b;

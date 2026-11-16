@@ -293,6 +293,7 @@ export default {
   'Interpret disk bytes as': 'Codificação para leitura do arquivo',
   'Reopen reads the file without changing its bytes. Use Convert encoding to change the file format.': 'Reabrir lê o arquivo sem alterar os bytes. Use Converter codificação para mudar o formato do arquivo.',
   'Select Language': 'Selecionar sintaxe',
+  'Automatic': 'Detecção automática',
   'Plain Text': 'Texto simples',
   'Custom language': 'Sintaxe personalizada',
   'File extensions (space separated)': 'Extensões de arquivo (separadas por espaço)',

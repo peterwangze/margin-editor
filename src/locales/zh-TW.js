@@ -293,6 +293,7 @@ export default {
   'Interpret disk bytes as': '讀取檔案時使用的編碼',
   'Reopen reads the file without changing its bytes. Use Convert encoding to change the file format.': '重新開啟只會再次讀取原檔。要變更儲存時使用的編碼，請使用「轉換編碼」。',
   'Select Language': '選擇語法',
+  'Automatic': '自動辨識',
   'Plain Text': '純文字',
   'Custom language': '自訂語法',
   'File extensions (space separated)': '副檔名（以空格分隔）',

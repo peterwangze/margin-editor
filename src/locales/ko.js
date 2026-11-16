@@ -119,6 +119,7 @@ export default {
   'Mixed ({eol})': '혼합 ({eol})',
   'Convert encoding': '인코딩 변환',
   'Select language': '구문 언어 선택',
+  'Automatic': '자동 감지',
   'Plain Text': '일반 텍스트',
   Indentation: '들여쓰기',
   'Spaces: {size}': '공백: {size}',

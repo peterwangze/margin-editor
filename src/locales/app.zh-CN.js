@@ -34,6 +34,7 @@ export default {
   'Mixed ({eol})': '混合（{eol}）',
   'Convert encoding': '转换编码',
   'Select language': '选择语法',
+  'Automatic': '自动识别',
   'Plain Text': '纯文本',
   Indentation: '缩进',
   'Spaces: {size}': '空格：{size}',

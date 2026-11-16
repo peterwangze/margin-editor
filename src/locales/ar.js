@@ -291,6 +291,7 @@ export default {
   'Interpret disk bytes as': 'تفسير بايتات الملف باستخدام',
   'Reopen reads the file without changing its bytes. Use Convert encoding to change the file format.': 'تقرأ إعادة الفتح الملف من دون تغيير البايتات. استخدم تحويل الترميز لتغيير صيغة الملف.',
   'Select Language': 'اختيار لغة الصياغة',
+  'Automatic': 'اكتشاف تلقائي',
   'Plain Text': 'نص عادي',
   'Custom language': 'لغة صياغة مخصصة',
   'File extensions (space separated)': 'امتدادات الملفات (مفصولة بمسافات)',

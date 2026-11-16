@@ -119,6 +119,7 @@ export default {
   'Mixed ({eol})': 'Gemischt ({eol})',
   'Convert encoding': 'Kodierung umwandeln',
   'Select language': 'Syntaxsprache auswählen',
+  'Automatic': 'Automatisch erkennen',
   'Plain Text': 'Klartext',
   Indentation: 'Einzug',
   'Spaces: {size}': 'Leerzeichen: {size}',

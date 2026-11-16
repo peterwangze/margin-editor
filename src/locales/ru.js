@@ -293,6 +293,7 @@ export default {
   'Interpret disk bytes as': 'Кодировка для чтения файла',
   'Reopen reads the file without changing its bytes. Use Convert encoding to change the file format.': 'При повторном открытии байты файла остаются прежними. Чтобы изменить кодировку файла, выберите «Преобразовать кодировку».',
   'Select Language': 'Выбрать синтаксис',
+  'Automatic': 'Автоопределение',
   'Plain Text': 'Обычный текст',
   'Custom language': 'Пользовательский синтаксис',
   'File extensions (space separated)': 'Расширения файлов через пробел',

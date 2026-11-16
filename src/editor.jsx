@@ -5,21 +5,22 @@ import {defaultKeymap, history, historyKeymap, indentWithTab, invertedEffects} f
 import {foldGutter, foldKeymap, bracketMatching, indentOnInput, indentUnit, syntaxHighlighting, HighlightStyle, StreamLanguage, foldable, foldEffect, ensureSyntaxTree} from '@codemirror/language'
 import {closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap} from '@codemirror/autocomplete'
 import {highlightSelectionMatches} from '@codemirror/search'
-import {languages} from '@codemirror/language-data'
 import {tags} from '@lezer/highlight'
+import '@fontsource/ibm-plex-mono/latin-600.css'
 import {updateMixed} from '../shared/text.mjs'
 import {udlMode} from './notepad-udl'
 import {useLocale} from './i18n'
 
 export const syntax = syntaxHighlighting(HighlightStyle.define([
-  {tag: [tags.propertyName, tags.keyword, tags.controlKeyword, tags.heading], color: 'var(--token-key)'},
+  {tag: [tags.propertyName, tags.heading], color: 'var(--token-key)'},
+  {tag: [tags.keyword, tags.controlKeyword], color: 'var(--token-keyword)', fontWeight: '600'},
   {tag: [tags.string, tags.regexp, tags.inserted], color: 'var(--token-string)'},
   {tag: [tags.number, tags.bool, tags.null, tags.atom], color: 'var(--token-number)'},
   {tag: [tags.comment, tags.meta], color: 'var(--token-comment)', fontStyle: 'italic'},
   {tag: [tags.typeName, tags.function(tags.variableName), tags.tagName], color: 'var(--token-blue)'},
   {tag: [tags.link, tags.url], color: 'var(--token-blue)', textDecoration: 'underline'},
   {tag: tags.strong, fontWeight: '700'}, {tag: tags.emphasis, fontStyle: 'italic'},
-  {tag: tags.invalid, color: 'var(--danger)'},
+  {tag: tags.invalid, color: 'var(--token-invalid)'},
 ]))
 
 export const syncChange = Annotation.define()
@@ -107,12 +108,6 @@ const overwriteInput = EditorView.inputHandler.of((view, from, to, text) => {
   return true
 })
 
-export function modeFor(doc, custom = []) {
-  const extension = doc.name.split('.').at(-1).toLowerCase()
-  return custom.find(mode => doc.language === mode.name || (!doc.language && mode.extensions.split(/[ ,]+/).includes(extension)))
-    ?? (doc.language ? languages.find(lang => lang.name === doc.language) : languages.find(lang => lang.filename?.test(doc.name) || lang.extensions?.includes(extension)))
-}
-
 function customMode(mode) {
   if (mode.udl) return udlMode(mode)
   const keywords = new Set(mode.keywords.split(/\s+/).filter(Boolean))
@@ -181,7 +176,7 @@ export function goTo(view, line, col = 1) {
   focusEditor(view)
 }
 
-export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, activate, onScroll, matches, matchIndex}) {
+export function EditorSurface({doc, mode, settings, slot, attach, onEdit, onCursor, activate, onScroll, matches, matchIndex}) {
   const {t} = useLocale()
   const host = useRef(null)
   const cache = useRef(new Map())
@@ -244,7 +239,6 @@ export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, ac
   useEffect(() => {
     const view = viewRef.current
     let alive = true
-    const mode = modeFor(doc, settings.languages)
     const apply = extension => {
       if (!alive) return
       view.dispatch({effects: compartments.current.mode.reconfigure(extension)})
@@ -263,7 +257,7 @@ export function EditorSurface({doc, settings, slot, attach, onEdit, onCursor, ac
     else if (mode.load) mode.load().then(apply).catch(() => apply([]))
     else apply(customMode(mode))
     return () => { alive = false }
-  }, [doc.id, doc.epoch, doc.name, doc.language, doc.size, settings.languages, slot])
+  }, [doc.id, doc.epoch, doc.size, mode, slot])
 
   useLayoutEffect(() => {
     const view = viewRef.current

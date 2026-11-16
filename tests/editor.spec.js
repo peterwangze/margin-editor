@@ -229,6 +229,109 @@ test('I09 imports a remapped Notepad++ shortcut and reports conflicts', async ({
   await expect(page.getByRole('textbox', {name: 'Find', exact: true})).toBeFocused()
 })
 
+test('I06 detects Verilog, preserves an explicit choice and shares readable syntax colors', async ({page}) => {
+  const syntax = page.locator('.status-controls').getByTitle('Select language', {exact: true})
+  const keyword = page.locator('.cm-line span').filter({hasText: /^module$/})
+  const prose = 'The module is ready. Please document the endmodule keyword.'
+  const source = 'module gates(input left, input right, output result);\n  assign result = left & right;\nendmodule'
+  const choose = async name => {
+    await syntax.click()
+    await page.getByRole('dialog').getByRole('button', {name, exact: true}).click()
+  }
+  const keywordStyle = async token => token.evaluate(element => {
+    const rgb = color => {
+      if (!color.startsWith('#')) return color.match(/[\d.]+/g).map(Number)
+      const hex = color.slice(1)
+      return (hex.length === 3 ? [...hex].map(value => value.repeat(2)) : hex.match(/.{2}/g))
+        .map(value => parseInt(value, 16))
+    }
+    const luminance = color => rgb(color).slice(0, 3).map(value => {
+      const channel = value / 255
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+    }).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0)
+    const contrast = (first, second) => {
+      const lightness = [luminance(first), luminance(second)].sort((a, b) => b - a)
+      return (lightness[0] + 0.05) / (lightness[1] + 0.05)
+    }
+    const keyword = getComputedStyle(element)
+    const plain = getComputedStyle(element.closest('.cm-line'))
+    let background = plain.backgroundColor
+    if (rgb(background)[3] === 0) background = getComputedStyle(element.closest('.editor-surface')).backgroundColor
+    const [red, green, blue] = rgb(keyword.color)
+    const theme = getComputedStyle(document.documentElement)
+    const themeColor = name => theme.getPropertyValue(name).trim()
+    const colors = ['--text', '--token-keyword', '--token-key', '--token-string', '--token-number', '--token-comment', '--token-blue', '--token-invalid']
+    const backgrounds = ['--canvas', '--focus-line', '--selection']
+    return {
+      blue: blue > green && green > red,
+      heavier: Number(keyword.fontWeight) > Number(plain.fontWeight),
+      distinct: keyword.color !== plain.color,
+      contrast: contrast(keyword.color, background),
+      paletteContrast: Object.fromEntries(colors.map(color => [
+        color, Math.min(...backgrounds.map(background => contrast(themeColor(color), themeColor(background)))),
+      ])),
+    }
+  })
+  const verifyThemes = async token => {
+    await expect(token).toBeVisible()
+    for (const theme of ['light', 'dark']) {
+      await page.getByRole('button', {name: 'Settings', exact: true}).click()
+      await page.getByRole('button', {name: /^Preferences/}).click()
+      await page.getByLabel('Appearance').selectOption(theme)
+      await page.getByRole('button', {name: 'Close dialog'}).click()
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      const style = await keywordStyle(token)
+      expect(style).toMatchObject({blue: true, heavier: true, distinct: true})
+      expect(style.contrast).toBeGreaterThanOrEqual(4.5)
+      for (const [color, ratio] of Object.entries(style.paletteContrast)) {
+        expect(ratio, `${color} on the ${theme} editor backgrounds`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  }
+
+  await expect(syntax).toHaveText('Plain Text')
+  await page.keyboard.insertText(prose)
+  await expect(lines(page)).toHaveText([prose])
+  await expect(syntax).toHaveText('Plain Text')
+  await page.keyboard.press(`${control}+a`)
+  const header = 'module gates('
+  await page.keyboard.insertText(header)
+  await expect(syntax).toHaveText('Verilog')
+  await page.keyboard.insertText(source.slice(header.length))
+  await expect(syntax).toHaveText('Verilog')
+  await verifyThemes(keyword)
+
+  await choose('Plain Text')
+  await expect(syntax).toHaveText('Plain Text')
+  await expect(keyword).toHaveCount(0)
+  await editor(page).focus()
+  await page.keyboard.press(`${control}+a`)
+  await page.keyboard.insertText(`${source}\n// manual choice`)
+  await page.reload()
+  await expect(lines(page).last()).toHaveText('// manual choice')
+  await expect(syntax).toHaveText('Plain Text')
+  await choose('Automatic')
+  await expect(syntax).toHaveText('Verilog')
+  await expect(keyword).toBeVisible()
+
+  await page.locator('input[type=file]').first().setInputFiles({
+    name: 'gates.sv', mimeType: 'text/plain', buffer: Buffer.from(source),
+  })
+  await expect(syntax).toHaveText('SystemVerilog')
+  await expect(keyword).toBeVisible()
+
+  for (const example of [
+    {name: 'example.py', mode: 'Python', source: 'def answer():\n    return 42', keyword: /^def$/},
+    {name: 'example.js', mode: 'JavaScript', source: 'const answer = 42;', keyword: /^const$/},
+  ]) {
+    await page.locator('input[type=file]').first().setInputFiles({
+      name: example.name, mimeType: 'text/plain', buffer: Buffer.from(example.source),
+    })
+    await expect(syntax).toHaveText(example.mode)
+    await verifyThemes(page.locator('.cm-line span').filter({hasText: example.keyword}))
+  }
+})
+
 test('I06 imports UDL keyword colors, comments, operators, delimiters and folds', async ({page}) => {
   await page.getByRole('button', {name: 'Language', exact: true}).click()
   const chooser = page.waitForEvent('filechooser')

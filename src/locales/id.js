@@ -293,6 +293,7 @@ export default {
   'Interpret disk bytes as': 'Pengodean untuk membaca berkas',
   'Reopen reads the file without changing its bytes. Use Convert encoding to change the file format.': 'Membuka ulang akan membaca berkas tanpa mengubah bitanya. Gunakan “Ubah pengodean” untuk mengubah format berkas.',
   'Select Language': 'Pilih sintaks',
+  'Automatic': 'Deteksi otomatis',
   'Plain Text': 'Teks polos',
   'Custom language': 'Sintaks khusus',
   'File extensions (space separated)': 'Ekstensi berkas (pisahkan dengan spasi)',

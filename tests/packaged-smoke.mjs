@@ -357,6 +357,9 @@ try {
   await expect(page.getByText('Saved offline.txt', {exact: true})).toBeVisible()
   assert.equal(await fs.readFile(file, 'utf8'), 'local edit\r\n中🙂\r\ncopy this')
 
+  const keywordContrast = await verifySyntaxHighlighting(toolbar, editor, status)
+  await tab.press('Enter')
+  await expect(tab).toHaveAttribute('aria-selected', 'true')
   await expectCleanRecoverySnapshot()
 
   await (await openLanguageSettings(false)).selectOption('zh-TW')
@@ -489,10 +492,11 @@ try {
     packageForm,
     version,
     interfaceLocales: ['en', 'zh-CN', ...Object.keys(addedLocales)],
+    keywordContrast,
     offline: 'Chromium used a loopback-only proxy and renderer HTTP(S) requests were blocked',
-    passed: ['desktop layout', 'narrow window', 'installed version display', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'bundled Cyrillic fonts', 'bundled Arabic and Devanagari fonts', 'CRLF save', 'find and replace', 'localized replacement and undo', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence', 'rtl interface and document direction'],
+    passed: ['desktop layout', 'narrow window', 'installed version display', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'bundled Cyrillic fonts', 'bundled Arabic and Devanagari fonts', 'CRLF save', 'find and replace', 'localized replacement and undo', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence', 'rtl interface and document direction', 'automatic syntax detection', 'syntax keyword contrast'],
   }, null, 2) + '\n')
-  console.log(`${packageForm}: layout, version display, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup, undo, interface language persistence and RTL passed`)
+  console.log(`${packageForm}: layout, version display, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup, undo, interface language persistence, RTL and syntax passed`)
 } catch (error) {
   await page?.screenshot({path: path.join(evidence, `${packageForm}-failed.png`)}).catch(() => {})
   console.error(output)
@@ -550,6 +554,106 @@ async function verifyAboutVersion() {
   await page.screenshot({path: path.join(evidence, `${packageForm}-version.png`), animations: 'disabled'})
   await page.keyboard.press('Escape')
   await expect(about).toBeHidden()
+}
+
+async function verifySyntaxHighlighting(toolbar, editor, status) {
+  const samples = [
+    {mode: 'Verilog', keyword: 'module', identifier: 'gates', source: 'module gates(input lhs, input rhs, output result);\n  assign result = lhs & rhs;\nendmodule'},
+    {mode: 'Python', keyword: 'def', identifier: 'value', source: 'def doubled(value):\n    return value * 2'},
+  ]
+  const syntax = status.getByTitle('Select language', {exact: true})
+  const canvas = page.locator('.editor-surface')
+  const appearance = page.getByRole('dialog', {name: 'Settings', exact: true}).getByRole('combobox', {name: 'Appearance', exact: true})
+  const selectAll = process.platform === 'darwin' ? 'Meta+a' : 'Control+a'
+  const selectSyntax = async name => {
+    await syntax.press('Enter')
+    await page.getByRole('dialog').getByRole('button', {name, exact: true}).press('Enter')
+  }
+  await toolbar.getByRole('button', {name: 'New document', exact: true}).press('Enter')
+  await expect(page.getByRole('tab', {selected: true})).toHaveText(/^Untitled \d+$/)
+  await expect(syntax).toHaveText('Plain Text')
+  await editor.focus()
+  const prose = 'The module is ready. Please review the notes.'
+  await page.keyboard.insertText(prose)
+  await expect(canvas.locator('.cm-line')).toHaveText(prose)
+  await expect(syntax).toHaveText('Plain Text')
+
+  await openLanguageSettings(false)
+  const originalTheme = await appearance.inputValue()
+  await page.keyboard.press('Escape')
+  const contrasts = {}
+  for (const sample of samples) {
+    const name = sample.mode.toLowerCase()
+    const keyword = canvas.locator('.cm-line span').filter({hasText: new RegExp(`^${sample.keyword}$`)})
+    await editor.focus()
+    await page.keyboard.press(selectAll)
+    await page.keyboard.insertText(sample.source)
+    await expect(syntax).toHaveText(sample.mode)
+    await expect(keyword).toBeVisible()
+
+    contrasts[name] = {}
+    for (const theme of ['light', 'dark']) {
+      await openLanguageSettings(false)
+      await appearance.selectOption(theme)
+      await page.keyboard.press('Escape')
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      const style = await keyword.evaluate((element, identifier) => {
+        const rgb = color => color.match(/[\d.]+/g).map(Number)
+        const weights = [0.2126, 0.7152, 0.0722]
+        const luminance = color => rgb(color).slice(0, 3).reduce((sum, value, index) => {
+          const channel = value / 255
+          const linear = channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+          return sum + linear * weights[index]
+        }, 0)
+        const line = element.closest('.cm-line')
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+        const word = new RegExp(`\\b${identifier}\\b`)
+        let identifierNode = walker.nextNode()
+        while (identifierNode && !word.test(identifierNode.textContent)) identifierNode = walker.nextNode()
+        if (!identifierNode) throw new Error(`Cannot find sample identifier ${identifier}`)
+        const keywordStyle = getComputedStyle(element)
+        const identifierStyle = getComputedStyle(identifierNode.parentElement)
+        const lineBackground = getComputedStyle(line).backgroundColor
+        const background = rgb(lineBackground)[3] === 0
+          ? getComputedStyle(element.closest('.editor-surface')).backgroundColor
+          : lineBackground
+        const [red, green, blue] = rgb(keywordStyle.color)
+        const [lighter, darker] = [luminance(keywordStyle.color), luminance(background)].sort((a, b) => b - a)
+        return {
+          blue: blue > green && green > red,
+          distinct: keywordStyle.color !== identifierStyle.color,
+          heavier: Number(keywordStyle.fontWeight) > Number(identifierStyle.fontWeight),
+          contrast: (lighter + 0.05) / (darker + 0.05),
+        }
+      }, sample.identifier)
+      assert.ok(style.blue && style.distinct && style.heavier, `${sample.mode} keywords stand out in the ${theme} theme`)
+      assert.ok(style.contrast >= 4.5, `${sample.mode} keyword contrast is at least 4.5:1 in the ${theme} theme`)
+      contrasts[name][theme] = Number(style.contrast.toFixed(2))
+      await canvas.screenshot({path: path.join(evidence, `${packageForm}-${name}-${theme}.png`), animations: 'disabled'})
+    }
+  }
+
+  await selectSyntax('Plain Text')
+  await editor.focus()
+  await page.keyboard.press('End')
+  await page.keyboard.insertText('\n# Manual mode')
+  await expect(canvas.locator('.cm-line').last()).toHaveText('# Manual mode')
+  await expect(syntax).toHaveText('Plain Text')
+  const pythonKeyword = canvas.locator('.cm-line span').filter({hasText: /^def$/})
+  await expect(pythonKeyword).toHaveCount(0)
+  await selectSyntax('Automatic')
+  await expect(syntax).toHaveText('Python')
+  await expect(pythonKeyword).toBeVisible()
+
+  await openLanguageSettings(false)
+  await appearance.selectOption(originalTheme)
+  await page.keyboard.press('Escape')
+  await editor.focus()
+  await page.keyboard.press(selectAll)
+  await page.keyboard.press('Backspace')
+  await expect(page.locator('.tab.selected .dirty-mark')).toHaveCount(0)
+  await page.locator('.tab.selected').getByRole('button', {name: /^Close Untitled \d+$/}).press('Enter')
+  return contrasts
 }
 
 async function verifyRtlMenu() {

@@ -1,13 +1,13 @@
 import {createRoot} from 'react-dom/client'
 import {useDeferredValue, useEffect, useRef, useState} from 'react'
 import {X, AlertTriangle, ChevronDown} from 'lucide-react'
-import {languages} from '@codemirror/language-data'
 import {Chrome, Explorer, Tabs, FindBar, Output, FileGlyph, IconButton} from './chrome'
 import {Dialog, Palette, Fields, Settings, WorkspaceSearch, Outline, LargeSearch, Projects} from './panels'
 import {Companion, DocumentMap} from './Companion'
 import {TextInspector} from './TextInspector'
 import {UpdateDialog} from './UpdateDialog'
-import {EditorSurface, goTo, isOverwrite, modeFor, syncEditor} from './editor'
+import {EditorSurface, goTo, isOverwrite, syncEditor} from './editor'
+import {languageNames, useSyntaxMode} from './syntax-mode'
 import {useDocuments} from './useDocuments'
 import {useFind} from './useFind'
 import {useCommands} from './useCommands'
@@ -26,7 +26,6 @@ import './style.css'
 
 const api = window.margin
 const latestReleaseUrl = 'https://github.com/peterwangze/margin-editor/releases/latest'
-const languageNames = languages.map(item => item.name).sort()
 const noMatches = []
 const cursorStart = {line: 1, col: 1, count: 0, lines: 1, overwrite: false}
 
@@ -54,6 +53,11 @@ function App() {
     }).catch(() => {})
   }, [api])
   const m = useDocuments(api, notify)
+  const primaryDoc = m.docs.find(doc => doc.id === m.main) ?? m.docs[0]
+  const secondaryDoc = m.split ? m.docs.find(doc => doc.id === m.secondary) ?? m.docs[0] : null
+  const primaryMode = useSyntaxMode(primaryDoc, m.settings.languages)
+  const secondaryMode = useSyntaxMode(secondaryDoc, m.settings.languages)
+  const mode = m.slot === 'secondary' && secondaryDoc ? secondaryMode : primaryMode
   const find = useFind(m.doc, m.selectedView, notify)
   const [panel, setPanel] = useState('')
   const [dialog, setDialog] = useState(null)
@@ -260,8 +264,7 @@ function App() {
     setCompanion('diff')
   }
 
-  function viewPane(slot, id) {
-    const doc = m.docs.find(item => item.id === id) ?? m.docs[0]
+  function viewPane(slot, doc, mode) {
     const active = m.slot === slot
     return <section className={`editor-pane ${active ? 'active-pane' : ''}`} aria-label={t(slot === 'main' ? 'Primary editor' : 'Secondary editor')}>
       <Tabs docs={m.docs} active={doc.id} focus={id => m.focus(id, slot)} close={id => safe(() => m.close([id]))} add={() => invoke('new')} reorder={m.reorder} context={(doc, x, y) => setContext({doc, x, y})} pane={slot} />
@@ -287,13 +290,12 @@ function App() {
         <button className="outline-button" disabled={doc.dirty || doc.large.index >= doc.large.pages - 1} onClick={() => safe(() => m.readPage(doc, doc.large.index + 1))}>{t('Next page')}</button>
         {active && <button className="outline-button" disabled={commands.wholeFile.disabled} onClick={() => invoke('wholeFile')}>{t('Find Across Pages…')}</button>}
       </div>}
-      <div className="editor-body"><EditorSurface doc={doc} settings={m.settings} slot={slot} attach={m.attach} onEdit={onEdit} onCursor={onCursor} activate={m.setSlot} onScroll={onScroll} matches={active && find.show ? find.result.matches : noMatches} matchIndex={active ? find.index : -1} />
+      <div className="editor-body"><EditorSurface doc={doc} mode={mode} settings={m.settings} slot={slot} attach={m.attach} onEdit={onEdit} onCursor={onCursor} activate={m.setSlot} onScroll={onScroll} matches={active && find.show ? find.result.matches : noMatches} matchIndex={active ? find.index : -1} />
         {minimap && active && <DocumentMap text={doc.text} direction={(doc.rtl ?? m.settings.rtl) ? 'rtl' : 'ltr'} navigate={line => goTo(m.selectedView(), line)} />}</div>
     </section>
   }
 
   const deferredDoc = useDeferredValue(m.doc)
-  const mode = modeFor(m.doc, m.settings.languages)
   const closeDialog = () => setDialog(null)
   const openLatestRelease = () => safe(() => api
     ? api.openExternal(latestReleaseUrl)
@@ -317,7 +319,7 @@ function App() {
         await m.openPath(path)
       })} />}
       {panel === 'search' && <WorkspaceSearch api={api} workspace={m.workspace} chooseFolder={() => invoke('openFolder')} openPath={(...args) => safe(() => m.openPath(...args))} docs={m.docs} notify={notify} reload={reloadFiles} hide={() => setPanel('')} />}
-      <div className="central"><div className="editing-area"><div className={`panes ${m.split}`}>{viewPane('main', m.main)}{m.split && viewPane('secondary', m.secondary)}</div>{companion && <Companion mode={companion} doc={m.doc} direction={(m.doc.rtl ?? m.settings.rtl) ? 'rtl' : 'ltr'} close={() => setCompanion('')} />}</div>{output && <Output data={output} close={() => setOutput(null)} />}
+      <div className="central"><div className="editing-area"><div className={`panes ${m.split}`}>{viewPane('main', primaryDoc, primaryMode)}{secondaryDoc && viewPane('secondary', secondaryDoc, secondaryMode)}</div>{companion && <Companion mode={companion} doc={m.doc} direction={(m.doc.rtl ?? m.settings.rtl) ? 'rtl' : 'ltr'} close={() => setCompanion('')} />}</div>{output && <Output data={output} close={() => setOutput(null)} />}
         {find.show && <FindBar query={find.query} change={find.change} replace={find.show === 'replace'} result={find.result} index={find.index} next={find.next} apply={find.apply} close={find.close} mark={() => invoke('markMatches')} options={() => invoke('searchOptions')} input={find.input} />}</div>
     </main>
     <footer className="status-bar" aria-label={t('Document status')}><div className="status-file" title={m.doc.path ?? documentTitle(m.doc, t)}>
