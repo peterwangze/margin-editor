@@ -1,6 +1,7 @@
 const {spawn} = require('node:child_process')
 const {randomUUID} = require('node:crypto')
 const fs = require('node:fs/promises')
+const os = require('node:os')
 const path = require('node:path')
 const {setTimeout: delay} = require('node:timers/promises')
 const {gzipSync} = require('node:zlib')
@@ -8,14 +9,20 @@ const {compareToStable} = require('./update.cjs')
 
 const versionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/
 const resultName = 'update-install-result.json'
-const helperFiles = ['package.exe', 'previous.exe', 'ready', 'approved', 'prepare-error', 'helper-pid', 'helper-pid.tmp']
+const helperFiles = [
+  'package.exe', 'previous.exe', 'ready', 'approved', 'prepare-error',
+  'helper-pid', 'helper-pid.tmp', 'helper-pid.error', 'worker-started', 'worker-load-error',
+]
+class HelperStartError extends Error {}
+
 const bootstrapScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$payload = $env:MARGIN_WINDOWS_INSTALL_COMMAND
+$arguments = $env:MARGIN_WINDOWS_INSTALL_ARGUMENTS
 $pidFile = $env:MARGIN_WINDOWS_INSTALL_PID_FILE
-$env:MARGIN_WINDOWS_INSTALL_COMMAND = $null
+$env:MARGIN_WINDOWS_INSTALL_ARGUMENTS = $null
 $env:MARGIN_WINDOWS_INSTALL_PID_FILE = $null
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+try {
 # Start a grandchild without carrying Electron's console or standard handles.
 Add-Type -TypeDefinition @'
 using System;
@@ -63,9 +70,13 @@ public static class MarginInstallerProcess {
     }
 }
 '@
-$helper = [MarginInstallerProcess]::Launch($powershell, ('-NoLogo -NoProfile -NonInteractive -EncodedCommand ' + $payload))
+$helper = [MarginInstallerProcess]::Launch($powershell, ('-NoLogo -NoProfile -NonInteractive ' + $arguments))
 [IO.File]::WriteAllText($pidFile + '.tmp', [string]$helper)
 [IO.File]::Move($pidFile + '.tmp', $pidFile)
+} catch {
+    [IO.File]::WriteAllText($pidFile + '.error', $_.Exception.Message)
+    exit 1
+}
 `
 
 const installScript = String.raw`
@@ -243,7 +254,7 @@ try {
     $prepared = $true
     # The launcher must acknowledge staging before the helper can install.
     $approval = [Diagnostics.Stopwatch]::StartNew()
-    while ($approval.ElapsedMilliseconds -lt 15000) {
+    while ($approval.ElapsedMilliseconds -lt 30000) {
         if ([IO.File]::Exists($approvedFile) -and [IO.File]::ReadAllText($approvedFile) -eq $spec.token) { $approved = $true; break }
         if ($parent.HasExited) { break }
         Start-Sleep -Milliseconds 100
@@ -303,7 +314,15 @@ try {
         if ([IO.File]::Exists($approvedFile)) { [IO.File]::Delete($approvedFile) }
         $pidFile = Join-Path $spec.work 'helper-pid'
         if ([IO.File]::Exists($pidFile)) { [IO.File]::Delete($pidFile) }
+        $workerStarted = Join-Path $spec.work 'worker-started'
+        if ([IO.File]::Exists($workerStarted)) { [IO.File]::Delete($workerStarted) }
         if (-not [IO.File]::Exists($previous) -and -not [IO.File]::Exists($prepareError)) { [IO.Directory]::Delete($spec.work, $false) }
+    }
+    if ($spec.workerFile) {
+        try {
+            [IO.File]::Delete($spec.workerFile)
+            [IO.Directory]::Delete([IO.Path]::GetDirectoryName($spec.workerFile), $false)
+        } catch {}
     }
 }
 `
@@ -317,32 +336,80 @@ function encodeCommand(script) {
   return Buffer.from(script, 'utf16le').toString('base64')
 }
 
-async function launchHelper(powershell, script, work) {
-  const payload = gzipSync(script).toString('base64')
-  const command = encodeCommand(`
+function workerSource(script, markerDirectory) {
+  const directory = Buffer.from(markerDirectory).toString('base64')
+  const getDirectory = `$markerDirectory = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${directory}'))`
+  const source = `
+$ErrorActionPreference = 'Stop'
+${getDirectory}
+try {
+    [IO.File]::WriteAllText((Join-Path $markerDirectory 'worker-started'), 'started')
+    ${script}
+} catch {
+    [IO.File]::WriteAllText((Join-Path $markerDirectory 'worker-load-error'), $_.Exception.Message)
+    exit 1
+}
+`
+  return {source, getDirectory}
+}
+
+function helperCommand({source, getDirectory}) {
+  const direct = encodeCommand(source)
+  if (direct.length <= 30000) return direct
+  // Keep unusually long Windows paths below CreateProcessW's command limit.
+  const payload = gzipSync(Buffer.from(source, 'utf16le')).toString('base64')
+  return encodeCommand(`
+$ErrorActionPreference = 'Stop'
+${getDirectory}
+try {
 $bytes = [IO.MemoryStream]::new([Convert]::FromBase64String('${payload}'))
 $gzip = [IO.Compression.GzipStream]::new($bytes, [IO.Compression.CompressionMode]::Decompress)
-$reader = [IO.StreamReader]::new($gzip)
+$reader = [IO.StreamReader]::new($gzip, [Text.Encoding]::Unicode)
 try { $script = $reader.ReadToEnd() } finally { $reader.Dispose() }
 & ([ScriptBlock]::Create($script))
+} catch {
+    [IO.File]::WriteAllText((Join-Path $markerDirectory 'worker-load-error'), $_.Exception.Message)
+    exit 1
+}
 `)
+}
+
+async function readMarker(work, name) {
+  try { return await fs.readFile(path.join(work, name), 'utf8') }
+  catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }
+}
+
+async function launchHelper(powershell, script, work, workerFile) {
+  const worker = workerSource(script, work)
+  let argumentsForWorker
+  if (workerFile) {
+    // Windows PowerShell expects a BOM for UTF-8 script files.
+    await fs.writeFile(workerFile, '\uFEFF' + worker.source, {flag: 'wx'})
+    argumentsForWorker = `-File "${workerFile}"`
+  } else {
+    argumentsForWorker = `-EncodedCommand ${helperCommand(worker)}`
+  }
   const pidFile = path.join(work, 'helper-pid')
   const bootstrap = spawn(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', encodeCommand(bootstrapScript)], {
-    env: {...process.env, MARGIN_WINDOWS_INSTALL_COMMAND: command, MARGIN_WINDOWS_INSTALL_PID_FILE: pidFile},
+    env: {...process.env, MARGIN_WINDOWS_INSTALL_ARGUMENTS: argumentsForWorker, MARGIN_WINDOWS_INSTALL_PID_FILE: pidFile},
     stdio: 'ignore',
     windowsHide: true,
   })
-  let startupFailed = false
-  bootstrap.once('error', () => { startupFailed = true })
-  const deadline = Date.now() + 15000
-  while (!startupFailed && Date.now() < deadline) {
-    const marker = await fs.readFile(pidFile, 'utf8').catch(() => '')
+  let startupError
+  bootstrap.once('error', error => { startupError = error })
+  const deadline = Date.now() + 35000
+  while (!startupError && Date.now() < deadline) {
+    const marker = await readMarker(work, 'helper-pid')
     const pid = Number(marker)
     if (/^[1-9]\d*$/.test(marker) && Number.isSafeInteger(pid)) return pid
     if (bootstrap.exitCode !== null && bootstrap.exitCode !== 0) break
     await delay(50)
   }
-  throw new Error('The Windows installer helper failed to start.')
+  const failure = await readMarker(work, 'helper-pid.error')
+  throw new HelperStartError(failure || startupError?.message || 'The Windows installer bootstrap did not report a process.')
 }
 
 function processExists(pid) {
@@ -351,6 +418,35 @@ function processExists(pid) {
     if (error.code === 'ESRCH') return false
     throw error
   }
+}
+
+async function prepareHelper(powershell, spec) {
+  const {work} = spec
+  const manifest = Buffer.from(JSON.stringify(spec)).toString('base64')
+  const script = `$spec = ConvertFrom-Json ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${manifest}')))\n${installScript}`
+  const helperPid = await launchHelper(powershell, script, work, spec.workerFile)
+  const begin = Date.now()
+  while (Date.now() - begin < 90000) {
+    const failure = await readMarker(work, 'prepare-error')
+    if (failure !== null) throw new Error(failure || 'The Windows installer helper could not prepare the update.')
+    const loadError = await readMarker(work, 'worker-load-error')
+    if (loadError !== null) throw new HelperStartError(loadError || 'The Windows installer worker could not load its script.')
+    const ready = await readMarker(work, 'ready')
+    if (ready === 'ready') {
+      await fs.writeFile(path.join(work, 'approved'), spec.token, {flag: 'wx'})
+      return
+    }
+    if (!processExists(helperPid)) {
+      const ended = await readMarker(work, 'prepare-error')
+      if (ended !== null) throw new Error(ended || 'The Windows installer helper could not prepare the update.')
+      throw new HelperStartError('The Windows installer worker exited before staging was ready.')
+    }
+    if (Date.now() - begin >= 35000 && !await readMarker(work, 'worker-started')) {
+      throw new HelperStartError('The Windows installer worker did not start.')
+    }
+    await delay(100)
+  }
+  throw new Error('The Windows installer helper timed out while staging the package.')
 }
 
 async function startWindowsInstall({
@@ -377,34 +473,26 @@ async function startWindowsInstall({
   const systemRoot = process.env.SystemRoot
   if (!systemRoot || !path.isAbsolute(systemRoot)) throw new Error('The Windows installer helper is unavailable.')
   const powershell = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-  const work = await fs.mkdtemp(path.join(portable ? path.dirname(target) : profile, '.margin-install-'))
-  const spec = {
-    artifact: {path: artifact.path, version: artifact.version, size: artifact.size, digest},
-    currentVersion, parentPid, portable, profile, target, work, relaunchArgs, token: randomUUID(),
-  }
-  const manifest = Buffer.from(JSON.stringify(spec)).toString('base64')
-  const script = `$spec = ConvertFrom-Json ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${manifest}')))\n${installScript}`
-  try {
-    const helperPid = await launchHelper(powershell, script, work)
-    const deadline = Date.now() + 90000
-    while (Date.now() < deadline) {
-      const failure = await fs.readFile(path.join(work, 'prepare-error'), 'utf8').catch(() => null)
-      if (failure !== null) throw new Error(failure || 'The Windows installer helper could not prepare the update.')
-      if (!processExists(helperPid)) {
-        const ended = await fs.readFile(path.join(work, 'prepare-error'), 'utf8').catch(() => '')
-        throw new Error(ended || 'The Windows installer helper failed to start.')
+  for (const useScriptFile of [true, false]) {
+    const work = await fs.mkdtemp(path.join(portable ? path.dirname(target) : profile, '.margin-install-'))
+    let workerDirectory
+    try {
+      if (useScriptFile) workerDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-native-helper-'))
+      const spec = {
+        artifact: {path: artifact.path, version: artifact.version, size: artifact.size, digest},
+        currentVersion, parentPid, portable, profile, target, work, relaunchArgs, token: randomUUID(),
+        workerFile: workerDirectory ? path.join(workerDirectory, 'install.ps1') : null,
       }
-      const ready = await fs.readFile(path.join(work, 'ready'), 'utf8').catch(() => null)
-      if (ready === 'ready') {
-        await fs.writeFile(path.join(work, 'approved'), spec.token, {flag: 'wx'})
-        return
+      await prepareHelper(powershell, spec)
+      return
+    } catch (error) {
+      await removeWorkFiles(work)
+      if (workerDirectory) {
+        await fs.unlink(path.join(workerDirectory, 'install.ps1')).catch(() => {})
+        await fs.rmdir(workerDirectory).catch(() => {})
       }
-      await delay(100)
+      if (!useScriptFile || !(error instanceof HelperStartError)) throw error
     }
-    throw new Error('The Windows installer helper timed out.')
-  } catch (error) {
-    await removeWorkFiles(work)
-    throw error
   }
 }
 
