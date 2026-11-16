@@ -100,6 +100,7 @@ test('G01 shows the installed version with a long filename and opens the About l
   })
   await page.setViewportSize({width: 650, height: 540})
   await expect(page.locator('.window-name')).toContainText(path.basename(file))
+  await expect.poll(() => page.locator('.title-bar').evaluate(element => element.getBoundingClientRect().width)).toBe(650)
   const shortcut = page.getByRole('button', {name: `About Margin v${installed}`, exact: true})
   await expect(shortcut).toBeInViewport({ratio: 1})
   await expect(shortcut).toHaveText(`v${installed}`)

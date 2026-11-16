@@ -159,7 +159,7 @@ svg { flex: none; vertical-align: middle; stroke-width: 1.65; }
 ::-webkit-scrollbar { width: 9px; height: 7px; }
 ::-webkit-scrollbar-thumb { background: var(--line); border: 2px solid transparent; border-radius: 5px; background-clip: padding-box; }
 .workbench { display: grid; grid-template-rows: 36px 30px 45px minmax(0,1fr) 29px; height: 100%; position: relative; }
-.title-bar { display: flex; align-items: center; background: var(--title); border-bottom: 1px solid var(--line); -webkit-app-region: drag; user-select: none; }
+.title-bar { display: flex; align-items: center; min-width: 0; background: var(--title); border-bottom: 1px solid var(--line); -webkit-app-region: drag; user-select: none; }
 .title-bar.mac { padding-left: 78px; }
 .title-bar:not(.mac) {
   padding-left: env(titlebar-area-x, 0px);
