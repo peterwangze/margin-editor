@@ -152,6 +152,10 @@ function relaunchEnvironment(env, profile) {
   const result = {...env, MARGIN_PROFILE: profile}
   delete result.ELECTRON_RUN_AS_NODE
   delete result.MARGIN_UPDATE_TOKEN
+  // The AppImage runtime consumes --appimage-extract-and-run before launching Electron.
+  if (env.APPIMAGE && env.APPDIR && /^appimage_extracted_[0-9a-f]+$/i.test(path.basename(env.APPDIR))) {
+    result.APPIMAGE_EXTRACT_AND_RUN = '1'
+  }
   if (env.APPDIR) {
     // AppRun prepends AppDir entries. The replacement's AppRun adds its own.
     for (const name of ['PATH', 'LD_LIBRARY_PATH', 'XDG_DATA_DIRS', 'GSETTINGS_SCHEMA_DIR']) {
@@ -185,10 +189,10 @@ async function stopReplacement(child) {
   }
 }
 
-async function writeResult(profile, version, status) {
+async function writeResult(profile, version, status, diagnostic) {
   const temporary = path.join(profile, `.update-result-${randomUUID()}.json`)
   try {
-    await fs.writeFile(temporary, JSON.stringify({status, version}), {flag: 'wx', mode: 0o600})
+    await fs.writeFile(temporary, JSON.stringify({status, version, diagnostic}), {flag: 'wx', mode: 0o600})
     await fs.rename(temporary, path.join(profile, 'update-install-result.json'))
   } finally {
     await fs.rm(temporary, {force: true})
@@ -273,15 +277,23 @@ async function worker(configPath) {
   }
 
   let status = 'failed'
+  let diagnostic
   try {
     if (config.kind === 'deb') status = await installDeb(config)
     else { await installReplacement(config); status = 'installed' }
   } catch (error) {
+    diagnostic = {phase: 'install', code: error.code ?? null}
     console.error(error.message)
   }
   if (config.kind === 'deb' || status !== 'installed') {
-    await writeResult(profile, latestVersion, status)
-    await launchApplication(executable, relaunchArgs, relaunchEnvironment(process.env, profile))
+    await writeResult(profile, latestVersion, status, diagnostic ?? {phase: 'launching'})
+    try {
+      const child = await launchApplication(executable, relaunchArgs, relaunchEnvironment(process.env, profile))
+      await writeResult(profile, latestVersion, status, {...(diagnostic ?? {phase: 'launched'}), pid: child.pid})
+    } catch (error) {
+      await writeResult(profile, latestVersion, 'failed', {phase: 'launch', code: error.code ?? null})
+      throw error
+    }
   }
   // If rollback was interrupted, preserve the original application for recovery.
   if (status === 'installed' || !await statOrMissing(path.join(work, 'previous'))) {

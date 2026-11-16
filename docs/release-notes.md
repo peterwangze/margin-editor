@@ -4,6 +4,10 @@ The update uses the package for your operating system and architecture. Margin s
 
 Margin 1.7.0 支持在应用内安装更新并重启。打开「帮助 → 检查更新」，选择「下载更新」，通过 SHA-256 校验后点击「安装并重启」。重启后会恢复打开的文档、未保存草稿和设置。关闭会话恢复时，Margin 也会为这次更新恢复一次会话。检查和下载更新需要联网，编辑可离线使用。
 
+If you are upgrading from 1.6.0 or earlier, open the downloaded installer or replace the portable app to install 1.7.0. The in-app installation button is available in 1.7.0 for future updates.
+
+由 1.6.0 或更早版本升级，请打开这次下载的安装包，或替换便携应用。升到 1.7.0 后，后续更新可在应用内安装。
+
 Margin supports 14 interface languages, including Arabic with right-to-left menus, Hindi, and Indonesian. Choose your language under **Settings → Preferences → Interface language**.
 
 ## Offline downloads / 离线安装包

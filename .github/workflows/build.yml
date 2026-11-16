@@ -80,17 +80,21 @@ jobs:
           git diff --exit-code -- package.json package-lock.json
           case "${{ matrix.platform }}" in
             win)
-              node tests/accept-upgrade.mjs setup
-              node tests/accept-upgrade.mjs portable
+              status=0
+              node tests/accept-upgrade.mjs setup || status=1
+              node tests/accept-upgrade.mjs portable || status=1
+              exit "$status"
               ;;
             mac)
               node tests/accept-upgrade.mjs dmg
               ;;
             linux)
               sudo unshare --net bash -c '
-                ip link set lo up
-                runuser -u "$1" -- xvfb-run -a "$2" tests/accept-upgrade.mjs deb &&
-                runuser -u "$1" -- xvfb-run -a "$2" tests/accept-upgrade.mjs appimage
+                ip link set lo up || exit
+                status=0
+                runuser -u "$1" -- xvfb-run -a "$2" tests/accept-upgrade.mjs deb || status=1
+                runuser -u "$1" -- xvfb-run -a "$2" tests/accept-upgrade.mjs appimage || status=1
+                exit "$status"
               ' bash "$(id -un)" "$(command -v node)"
               ;;
           esac

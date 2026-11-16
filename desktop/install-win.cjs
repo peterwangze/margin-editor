@@ -3,23 +3,39 @@ const {randomUUID} = require('node:crypto')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const {setTimeout: delay} = require('node:timers/promises')
+const {gzipSync} = require('node:zlib')
 const {compareToStable} = require('./update.cjs')
 
 const versionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/
 const resultName = 'update-install-result.json'
-const helperFiles = ['package.exe', 'previous.exe', 'ready', 'prepare-error']
+const helperFiles = ['package.exe', 'previous.exe', 'ready', 'approved', 'prepare-error', 'helper-pid', 'helper-pid.tmp']
+const bootstrapScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$payload = $env:MARGIN_WINDOWS_INSTALL_COMMAND
+$pidFile = $env:MARGIN_WINDOWS_INSTALL_PID_FILE
+$env:MARGIN_WINDOWS_INSTALL_COMMAND = $null
+$env:MARGIN_WINDOWS_INSTALL_PID_FILE = $null
+$powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+# libuv terminates its direct Windows children on exit. Start-Process
+# creates a grandchild which breaks away from that job and can survive.
+$helper = Start-Process -FilePath $powershell -ArgumentList @('-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', $payload) -WindowStyle Hidden -PassThru
+[IO.File]::WriteAllText($pidFile + '.tmp', [string]$helper.Id)
+[IO.File]::Move($pidFile + '.tmp', $pidFile)
+`
 
 const installScript = String.raw`
 $ErrorActionPreference = 'Stop'
 $staged = Join-Path $spec.work 'package.exe'
 $previous = Join-Path $spec.work 'previous.exe'
 $ready = Join-Path $spec.work 'ready'
+$approvedFile = Join-Path $spec.work 'approved'
 $prepareError = Join-Path $spec.work 'prepare-error'
 $result = Join-Path $spec.profile '${resultName}'
 $startup = Join-Path $spec.profile 'update-install-ready.json'
 $completedHandoff = $false
 $parentExited = $false
 $prepared = $false
+$approved = $false
 $rollbackNeeded = $false
 $newApp = $null
 
@@ -180,6 +196,14 @@ try {
     }
     [IO.File]::WriteAllText($ready, 'ready')
     $prepared = $true
+    # The launcher must acknowledge staging before the helper can install.
+    $approval = [Diagnostics.Stopwatch]::StartNew()
+    while ($approval.ElapsedMilliseconds -lt 15000) {
+        if ([IO.File]::Exists($approvedFile) -and [IO.File]::ReadAllText($approvedFile) -eq $spec.token) { $approved = $true; break }
+        if ($parent.HasExited) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    if (-not $approved) { throw 'Margin did not confirm the Windows installer handoff.' }
     if (-not $parent.WaitForExit(120000)) { throw 'Margin did not close before the installation began.' }
     $parentExited = $true
 
@@ -200,7 +224,7 @@ try {
     $completedHandoff = $true
 } catch {
     $message = $_.Exception.Message
-    if (-not $prepared) {
+    if (-not $approved) {
         [IO.File]::WriteAllText($prepareError, $message)
     } else {
         $status = if ($_.Exception -is [OperationCanceledException]) { 'cancelled' } else { 'failed' }
@@ -231,7 +255,10 @@ try {
         if ([IO.File]::Exists($staged)) { [IO.File]::Delete($staged) }
         if ($completedHandoff -and [IO.File]::Exists($previous)) { [IO.File]::Delete($previous) }
         if ([IO.File]::Exists($ready)) { [IO.File]::Delete($ready) }
-        if (-not [IO.File]::Exists($previous)) { [IO.Directory]::Delete($spec.work, $false) }
+        if ([IO.File]::Exists($approvedFile)) { [IO.File]::Delete($approvedFile) }
+        $pidFile = Join-Path $spec.work 'helper-pid'
+        if ([IO.File]::Exists($pidFile)) { [IO.File]::Delete($pidFile) }
+        if (-not [IO.File]::Exists($previous) -and -not [IO.File]::Exists($prepareError)) { [IO.Directory]::Delete($spec.work, $false) }
     }
 }
 `
@@ -239,6 +266,46 @@ try {
 async function removeWorkFiles(work) {
   await Promise.all(helperFiles.map(name => fs.unlink(path.join(work, name)).catch(() => {})))
   await fs.rmdir(work).catch(() => {})
+}
+
+function encodeCommand(script) {
+  return Buffer.from(script, 'utf16le').toString('base64')
+}
+
+async function launchHelper(powershell, script, work) {
+  const payload = gzipSync(script).toString('base64')
+  const command = encodeCommand(`
+$bytes = [IO.MemoryStream]::new([Convert]::FromBase64String('${payload}'))
+$gzip = [IO.Compression.GzipStream]::new($bytes, [IO.Compression.CompressionMode]::Decompress)
+$reader = [IO.StreamReader]::new($gzip)
+try { $script = $reader.ReadToEnd() } finally { $reader.Dispose() }
+& ([ScriptBlock]::Create($script))
+`)
+  const pidFile = path.join(work, 'helper-pid')
+  const bootstrap = spawn(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', encodeCommand(bootstrapScript)], {
+    env: {...process.env, MARGIN_WINDOWS_INSTALL_COMMAND: command, MARGIN_WINDOWS_INSTALL_PID_FILE: pidFile},
+    stdio: 'ignore',
+    windowsHide: true,
+  })
+  let startupFailed = false
+  bootstrap.once('error', () => { startupFailed = true })
+  const deadline = Date.now() + 15000
+  while (!startupFailed && Date.now() < deadline) {
+    const marker = await fs.readFile(pidFile, 'utf8').catch(() => '')
+    const pid = Number(marker)
+    if (/^[1-9]\d*$/.test(marker) && Number.isSafeInteger(pid)) return pid
+    if (bootstrap.exitCode !== null && bootstrap.exitCode !== 0) break
+    await delay(50)
+  }
+  throw new Error('The Windows installer helper failed to start.')
+}
+
+function processExists(pid) {
+  try { process.kill(pid, 0); return true }
+  catch (error) {
+    if (error.code === 'ESRCH') return false
+    throw error
+  }
 }
 
 async function startWindowsInstall({
@@ -272,39 +339,25 @@ async function startWindowsInstall({
   }
   const manifest = Buffer.from(JSON.stringify(spec)).toString('base64')
   const script = `$spec = ConvertFrom-Json ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${manifest}')))\n${installScript}`
-  const command = Buffer.from(script, 'utf16le').toString('base64')
-  let helper
-  let helperError
   try {
-    // Windows PowerShell 5 can exit before evaluating the script if created
-    // with DETACHED_PROCESS. Unreferencing the hidden helper still lets Margin
-    // exit while the helper waits on the original process handle.
-    helper = spawn(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', command], {
-      stdio: 'ignore', windowsHide: true,
-    })
-    helper.once('error', error => { helperError = error })
+    const helperPid = await launchHelper(powershell, script, work)
     const deadline = Date.now() + 90000
     while (Date.now() < deadline) {
       const failure = await fs.readFile(path.join(work, 'prepare-error'), 'utf8').catch(() => null)
       if (failure !== null) throw new Error(failure || 'The Windows installer helper could not prepare the update.')
-      if (helperError || helper.exitCode !== null || helper.signalCode !== null) {
+      if (!processExists(helperPid)) {
         const ended = await fs.readFile(path.join(work, 'prepare-error'), 'utf8').catch(() => '')
         throw new Error(ended || 'The Windows installer helper failed to start.')
       }
       const ready = await fs.readFile(path.join(work, 'ready'), 'utf8').catch(() => null)
       if (ready === 'ready') {
-        helper.unref()
+        await fs.writeFile(path.join(work, 'approved'), spec.token, {flag: 'wx'})
         return
       }
       await delay(100)
     }
     throw new Error('The Windows installer helper timed out.')
   } catch (error) {
-    if (helper?.pid && helper.exitCode === null && helper.signalCode === null) {
-      const exit = new Promise(resolve => helper.once('exit', resolve))
-      helper.kill()
-      await Promise.race([exit, delay(2000)])
-    }
     await removeWorkFiles(work)
     throw error
   }

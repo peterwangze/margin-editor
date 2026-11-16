@@ -326,12 +326,24 @@ try {
     assert.ok(Date.now() < deadline, `${form}: the original application did not exit after installation was requested`)
     await delay(250)
   }
-  await expect.poll(async () => {
-    const ready = await json(readyFile)
-    if (ready?.version === version && Number.isSafeInteger(ready.pid)) newPid = ready.pid
-    try { return (await fetch(`${address}/json/version`, {signal: AbortSignal.timeout(350)})).ok }
-    catch { return false }
-  }, {timeout: 120000}).toBe(true)
+  try {
+    await expect.poll(async () => {
+      const ready = await json(readyFile)
+      if (ready?.version === version && Number.isSafeInteger(ready.pid)) newPid = ready.pid
+      try { return (await fetch(`${address}/json/version`, {signal: AbortSignal.timeout(350)})).ok }
+      catch { return false }
+    }, {timeout: 120000}).toBe(true)
+  } catch (error) {
+    const result = await json(resultFile).catch(() => null)
+    const ready = await json(readyFile).catch(() => null)
+    const database = form === 'deb'
+      ? (await execute('dpkg-query', ['-W', '-f=${db:Status-Status} ${Version} ${Architecture}', packageName]).catch(() => null))?.stdout.trim()
+      : undefined
+    throw new Error(`${form}: application did not restart (${JSON.stringify({
+      status: result?.status, version: result?.version, message: result?.message,
+      readyVersion: ready?.version, readyPid: ready?.pid, database,
+    })})`, {cause: error})
+  }
   restartedBrowser = await chromium.connectOverCDP(address, {timeout: 15000})
   const browserSession = await restartedBrowser.newBrowserCDPSession()
   const {processInfo} = await browserSession.send('SystemInfo.getProcessInfo')

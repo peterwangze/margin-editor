@@ -192,6 +192,7 @@ const actions = {
       const relaunchArgs = process.env.MARGIN_PROFILE && process.env.MARGIN_TEST_LOCALE && /^[1-9]\d*$/.test(debugPort)
         ? [`--remote-debugging-port=${debugPort}`]
         : []
+      if (process.platform === 'linux' && app.commandLine.hasSwitch('no-sandbox')) relaunchArgs.push('--no-sandbox')
       if (process.platform === 'win32') {
         const {startWindowsInstall} = require('./install-win.cjs')
         helper = {start: () => startWindowsInstall({
