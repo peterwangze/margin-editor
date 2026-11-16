@@ -6,6 +6,7 @@ import {Chrome, Explorer, Tabs, FindBar, Output, FileGlyph, IconButton} from './
 import {Dialog, Palette, Fields, Settings, WorkspaceSearch, Outline, LargeSearch, Projects} from './panels'
 import {Companion, DocumentMap} from './Companion'
 import {TextInspector} from './TextInspector'
+import {UpdateDialog} from './UpdateDialog'
 import {EditorSurface, goTo, isOverwrite, modeFor, syncEditor} from './editor'
 import {useDocuments} from './useDocuments'
 import {useFind} from './useFind'
@@ -289,6 +290,9 @@ function App() {
   const deferredDoc = useDeferredValue(m.doc)
   const mode = modeFor(m.doc, m.settings.languages)
   const closeDialog = () => setDialog(null)
+  const openLatestRelease = () => safe(() => api
+    ? api.openExternal(latestReleaseUrl)
+    : window.open(latestReleaseUrl, '_blank', 'noopener,noreferrer'))
   const paletteItems = Object.values(commands).filter(item => !item.disabled && item.id !== 'palette')
   return <div className="workbench" style={{'--editor-size': `${m.settings.fontSize}px`}} onDragOver={event => {
     if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDrag(true) }
@@ -346,11 +350,14 @@ function App() {
       <div className="form">
         <p>{t('Margin is an offline desktop editor for notes, lists, logs, and other plain text.')}</p>
         <p>{t('Version {version} · MIT', {version})}</p>
-        <button className="outline-button" onClick={() => safe(() => api
-          ? api.openExternal(latestReleaseUrl)
-          : window.open(latestReleaseUrl, '_blank', 'noopener,noreferrer'))}>{t('View latest release')}</button>
+        <div className="form-actions">
+          <button className="primary-button" onClick={() => invoke('checkUpdates')}>{t('Check for updates')}</button>
+          <button className="outline-button" onClick={openLatestRelease}>{t('View latest release')}</button>
+          <button className="text-button" onClick={() => invoke('repository')}>{t('Star on GitHub')}</button>
+        </div>
       </div>
     </Dialog>}
+    {dialog?.kind === 'updates' && <UpdateDialog api={api} version={version} close={closeDialog} openLatest={openLatestRelease} />}
     {dialog?.kind === 'inspect-text' && <TextInspector snapshot={dialog.snapshot} close={closeDialog} />}
     {dialog?.kind === 'open-search' && <OpenSearch docs={m.docs} focus={m.focus} close={closeDialog} />}
     {dialog?.kind === 'large-search' && <LargeSearch api={api} doc={m.doc} close={closeDialog} initialQuery={find.query} jump={match => safe(async () => { await m.readPage(m.doc, match.page, match); m.selectedView()?.focus() })} />}

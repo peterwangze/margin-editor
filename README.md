@@ -33,7 +33,7 @@ Open Margin and start typing. The menu, toolbar, and document tabs keep common a
 
 Open the release and choose the asset for your system and processor. The release also includes `SHA256SUMS.txt` to verify your download. [Releases and offline downloads](https://github.com/peterwangze/margin-editor/releases) · [Earlier 0.9.1 packages](https://github.com/peterwangze/margin-editor/releases/tag/v0.9.1)
 
-To check your installed version, click the version number in the title bar. In **About Margin**, choose **View latest release** to compare it with the current release on GitHub.
+Click the version number in the title bar to open **About Margin**. Use **Check for updates** there or under **Help** to see whether a newer stable version is available and read its release notes. **Download update** verifies the package for your operating system and architecture and saves it to Downloads. Open that file when you're ready to update. Editing works offline.
 
 | Platform | Intel or AMD 64-bit | ARM64 | How to start |
 | --- | --- | --- | --- |

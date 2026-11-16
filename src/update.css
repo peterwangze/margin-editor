@@ -1,0 +1,139 @@
+.dialog.update-dialog {
+  width: min(540px, calc(100vw - 32px));
+  max-height: min(84vh, 660px);
+}
+
+.update-dialog .dialog-head {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  background: var(--chrome);
+}
+
+.update-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.update-versions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.update-versions div,
+.update-package {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.update-versions dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.update-versions dd {
+  margin: 3px 0 0;
+  font-family: var(--mono);
+  font-size: 16px;
+}
+
+.update-status {
+  margin: 0;
+}
+
+.update-status:empty {
+  display: none;
+}
+
+.update-package h3,
+.update-notes h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.update-package p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.update-package bdi[dir='ltr'] {
+  font-family: var(--mono);
+}
+
+.update-package .update-download-path {
+  color: var(--quiet);
+  font-size: 12px;
+}
+
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.update-actions button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: start;
+}
+
+.update-notes {
+  min-width: 0;
+  padding-block-start: 9px;
+  border-block-start: 1px solid var(--line);
+}
+
+.update-note-body {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.update-note-body :is(h1, h2, h3, h4, h5, h6) {
+  margin-block: 9px 5px;
+  color: var(--text);
+  font-size: 1em;
+}
+
+.update-note-body :is(p, ul, ol, blockquote, pre, table) {
+  margin-block: 6px;
+}
+
+.update-note-body :is(ul, ol) {
+  padding-inline-start: 20px;
+}
+
+.update-note-body blockquote {
+  margin-inline: 0;
+  padding-inline-start: 10px;
+  border-inline-start: 2px solid var(--line);
+}
+
+.update-note-body pre {
+  padding: 6px;
+  white-space: pre-wrap;
+  background: var(--canvas);
+}
+
+.update-note-body table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.update-note-body :is(td, th) {
+  padding: 3px 5px;
+  border: 1px solid var(--line);
+  text-align: start;
+}
+
+@media (max-width: 350px) {
+  .update-versions { grid-template-columns: minmax(0, 1fr); }
+}

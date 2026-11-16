@@ -12,10 +12,11 @@ export const menus = {
   Macro: ['macroRecord', 'macroPlay', 'macroSave', 'macroLibrary'],
   Run: ['run', 'tools'],
   Window: ['documents', 'previousTab', 'nextTab', '—', 'close', 'closeOthers', 'closeAll', 'reopen'],
-  Help: ['samples', 'about', 'repository'],
+  Help: ['samples', 'about', 'checkUpdates', 'repository'],
 }
 
 export const definitions = {
+  checkUpdates: ['Check for updates'],
   new: ['New document', 'Mod+N'], open: ['Open files…', 'Mod+O'], openFolder: ['Open folder…', 'Mod+Shift+O'], recent: ['Recent files…'], quick: ['Quick open…', 'Mod+P'],
   save: ['Save', 'Mod+S'], saveAs: ['Save as…', 'Mod+Shift+S'], saveCopy: ['Save a copy…'], saveAll: ['Save all'], reload: ['Reload from disk'], rename: ['Rename file…'], reveal: ['Reveal in file manager'], trash: ['Move file to trash…'],
   close: ['Close tab', 'Mod+W'], closeOthers: ['Close other tabs'], closeAll: ['Close all tabs'], reopen: ['Reopen closed tab', 'Mod+Shift+T'], print: ['Print…'], exportSession: ['Export session…'], importSession: ['Import Margin session…'], importNotepadSession: ['Import Notepad++ session…'],

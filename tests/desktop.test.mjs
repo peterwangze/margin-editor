@@ -2,6 +2,7 @@ import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {once} from 'node:events'
 import {execFile} from 'node:child_process'
+import {createHash} from 'node:crypto'
 import {promisify} from 'node:util'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -78,7 +79,7 @@ test('L01 defaults to the native OS language and handles a profile from 1.0', {t
   }
 })
 
-test('G01 shows the installed version with a long filename and opens the latest release', {timeout: 40000}, async t => {
+test('G01 shows the installed version with a long filename and opens the About links', {timeout: 40000}, async t => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-app-version-'))
   const profile = path.join(temp, 'profile')
   await fs.mkdir(profile)
@@ -94,7 +95,7 @@ test('G01 shows the installed version with a long filename and opens the latest 
   const {page} = opened
   const installed = await app.evaluate(({app, BrowserWindow, shell}) => {
     BrowserWindow.getAllWindows()[0].setSize(650, 540)
-    shell.openExternal = async url => { globalThis.requestedReleaseUrl = url }
+    shell.openExternal = async url => { globalThis.openedProjectUrl = url }
     return app.getVersion()
   })
   await page.setViewportSize({width: 650, height: 540})
@@ -112,8 +113,97 @@ test('G01 shows the installed version with a long filename and opens the latest 
   const about = page.getByRole('dialog', {name: 'About Margin', exact: true})
   await expect(about.getByText(`Version ${installed} · MIT`, {exact: true})).toBeVisible()
   await about.getByRole('button', {name: 'View latest release', exact: true}).click()
-  await expect.poll(() => app.evaluate(() => globalThis.requestedReleaseUrl))
+  await expect.poll(() => app.evaluate(() => globalThis.openedProjectUrl))
     .toBe('https://github.com/peterwangze/margin-editor/releases/latest')
+  await about.getByRole('button', {name: 'Star on GitHub', exact: true}).click()
+  await expect.poll(() => app.evaluate(() => globalThis.openedProjectUrl))
+    .toBe('https://github.com/peterwangze/margin-editor')
+})
+
+test('G07 checks the release, retries a failure and downloads the matching package', {timeout: 40000}, async t => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-update-'))
+  const profile = path.join(temp, 'profile')
+  const downloads = path.join(temp, 'downloads')
+  await fs.mkdir(profile)
+  await fs.mkdir(downloads)
+  let app
+  t.after(async () => {
+    await app?.close().catch(() => {})
+    await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  const opened = await launch(profile)
+  app = opened.app
+  const {page} = opened
+  const releaseApi = 'https://api.github.com/repos/peterwangze/margin-editor/releases/latest'
+  const latest = '99.0.0'
+  const notes = 'Find and replace now remembers the previous search.'
+  const fixture = 'offline update fixture'
+  const digest = 'sha256:' + createHash('sha256').update(fixture).digest('hex')
+  const arch = process.arch
+  const names = {
+    win32: [`Margin-${latest}-win-${arch}-setup.exe`, `Margin-${latest}-win-${arch}-portable.exe`],
+    darwin: [`Margin-${latest}-mac-${arch}.dmg`],
+    linux: [`Margin-${latest}-linux-${arch === 'x64' ? 'x86_64' : 'arm64'}.AppImage`, `Margin-${latest}-linux-${arch === 'x64' ? 'amd64' : 'arm64'}.deb`],
+  }[process.platform]
+  const assets = names.map(name => ({
+    name, state: 'uploaded', size: Buffer.byteLength(fixture), digest,
+    browser_download_url: `https://github.com/peterwangze/margin-editor/releases/download/v${latest}/${name}`,
+  }))
+  const current = await app.evaluate(({app, shell}, data) => {
+    app.setPath('downloads', data.downloads)
+    globalThis.testUpdateMode = 'current'
+    globalThis.testUpdateRequests = []
+    const cdn = 'https://release-assets.githubusercontent.com/margin-test-fixture'
+    globalThis.fetch = async requested => {
+      const url = String(requested)
+      globalThis.testUpdateRequests.push(url)
+      if (globalThis.testUpdateMode === 'failure') throw new Error('Test network unavailable')
+      if (url === data.releaseApi) {
+        const release = {tag_name: `v${app.getVersion()}`, draft: false, prerelease: false, body: '', assets: []}
+        if (globalThis.testUpdateMode === 'available') Object.assign(release, {tag_name: `v${data.latest}`, body: data.notes, assets: data.assets})
+        return Response.json(release)
+      }
+      if (data.assets.some(asset => asset.browser_download_url === url)) return Response.redirect(cdn)
+      if (url === cdn) return new Response(data.fixture)
+      return new Response('', {status: 404})
+    }
+    shell.showItemInFolder = file => { globalThis.shownUpdate = file }
+    return app.getVersion()
+  }, {downloads, releaseApi, latest, notes, assets, fixture})
+
+  const editor = page.getByRole('textbox', {name: 'Document editor', exact: true})
+  await editor.focus()
+  await page.keyboard.insertText('Keep this unsaved draft.')
+  await page.getByRole('button', {name: `About Margin v${current}`, exact: true}).click()
+  await page.getByRole('dialog').getByRole('button', {name: 'Check for updates', exact: true}).click()
+  const updater = page.getByRole('dialog', {name: 'Check for updates', exact: true})
+  await expect(updater.getByText('Margin is up to date.', {exact: true})).toBeVisible()
+  await expect(updater.getByRole('button', {name: 'Download update'})).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  await app.evaluate(() => { globalThis.testUpdateMode = 'failure' })
+  await page.getByRole('button', {name: 'Help', exact: true}).click()
+  await page.getByRole('button', {name: 'Check for updates', exact: true}).click()
+  await expect(updater.getByText('Could not check for updates.', {exact: true})).toBeVisible()
+  await app.evaluate(() => { globalThis.testUpdateMode = 'available' })
+  await updater.getByRole('button', {name: 'Try again', exact: true}).click()
+  await expect(updater.getByText('An update is available.', {exact: true})).toBeVisible()
+  await expect(updater.getByText(notes, {exact: true})).toBeVisible()
+
+  const selected = updater.getByText(new RegExp(`^(?:${names.map(name => name.replaceAll('.', '\\.')).join('|')})$`))
+  await expect(selected).toBeVisible()
+  const selectedName = await selected.innerText()
+  assert.ok(names.includes(selectedName))
+  assert.deepEqual(await app.evaluate(() => globalThis.testUpdateRequests), [releaseApi, releaseApi, releaseApi])
+  await updater.getByRole('button', {name: 'Download update', exact: true}).click()
+  const show = updater.getByRole('button', {name: 'Show in folder', exact: true})
+  await expect(show).toBeEnabled()
+  const downloaded = path.join(downloads, selectedName)
+  assert.equal(await fs.readFile(downloaded, 'utf8'), fixture)
+  await show.click()
+  await expect.poll(() => app.evaluate(() => globalThis.shownUpdate)).toBe(downloaded)
+  await page.keyboard.press('Escape')
+  await expect(editor).toHaveText('Keep this unsaved draft.')
 })
 
 test('I01/I05/I07 open from CLI, edit, write encoded bytes, block external overwrite and recover after close', {timeout: 75000}, async t => {

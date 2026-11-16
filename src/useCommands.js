@@ -267,7 +267,9 @@ export function useCommands(ctx) {
       if (canonical && duplicate) throw new Error(t('That shortcut is already assigned to {command}.', {command: t(duplicate[1][0])}))
       setting({shortcuts: {...m.settings.shortcuts, [item.id]: canonical}})
     })),
-    about: () => setDialog({kind: 'about'}), repository: () => api ? api.openExternal('https://github.com/peterwangze/margin-editor') : window.open('https://github.com/peterwangze/margin-editor', '_blank', 'noopener,noreferrer'),
+    about: () => setDialog({kind: 'about'}),
+    checkUpdates: () => setDialog({kind: 'updates'}),
+    repository: () => api ? api.openExternal('https://github.com/peterwangze/margin-editor') : window.open('https://github.com/peterwangze/margin-editor', '_blank', 'noopener,noreferrer'),
   }
   for (const [id, action] of Object.entries(simple)) actions[id] = () => (['selectAll', 'selectNext', 'foldAll', 'unfoldAll'].includes(id) ? edit : alter)(action)
   for (const [id, transform] of Object.entries(transforms)) actions[id] = () => applyTransform(transform, id === 'formatJson' || id === 'compactJson')

@@ -7,11 +7,18 @@ const {spawn} = require('node:child_process')
 const {createHash, randomUUID} = require('node:crypto')
 const {setTimeout: wait} = require('node:timers/promises')
 const {installMenu, saveDialogTitle} = require('./localized-menu.cjs')
+const {createUpdater} = require('./update.cjs')
 
 const profile = process.env.MARGIN_PROFILE || (process.env.PORTABLE_EXECUTABLE_DIR && path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'Margin Data'))
 if (profile) app.setPath('userData', path.resolve(profile))
 const dist = path.join(__dirname, '../dist')
 const page = 'margin://local/index.html'
+const updater = createUpdater({
+  fetch: (...args) => globalThis.fetch(...args),
+  getVersion: () => app.getVersion(),
+  getDownloads: () => app.getPath('downloads'),
+  showItemInFolder: file => shell.showItemInFolder(file),
+})
 protocol.registerSchemesAsPrivileged([{scheme: 'margin', privileges: {standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, codeCache: true}}])
 let window
 let searchJob
@@ -152,6 +159,9 @@ async function createWindow() {
 }
 
 const actions = {
+  checkForUpdates: updater.checkForUpdates,
+  downloadUpdate: updater.downloadUpdate,
+  showDownloadedUpdate: updater.showDownloadedUpdate,
   interfaceLanguage() { return {preference: uiPreference, systemLanguages: systemLanguages()} },
   async systemLanguages() { await applyInterfaceLanguage(); return systemLanguages() },
   async setInterfaceLanguage(preference) {
