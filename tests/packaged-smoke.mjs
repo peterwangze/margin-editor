@@ -12,6 +12,7 @@ const executable = process.env.MARGIN_EXECUTABLE
 const evidence = process.env.MARGIN_EVIDENCE
 const packageForm = process.env.MARGIN_PACKAGE_FORM
 assert.ok(executable && evidence && packageForm, 'Set MARGIN_EXECUTABLE, MARGIN_EVIDENCE, and MARGIN_PACKAGE_FORM')
+const portable = process.platform === 'win32' && packageForm === 'portable'
 await fs.mkdir(evidence, {recursive: true})
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-packaged-'))
 const profile = path.join(temp, 'profile')
@@ -23,6 +24,7 @@ let exited
 let output = ''
 let browser
 let page
+let portableTemp
 const pageErrors = []
 const addedLocales = {
   'zh-TW': {label: '繁體中文', settings: '設定', preference: '介面語言', system: '跟隨系統', editor: '文件編輯器', search: '尋找與取代', find: '尋找', replace: '取代', closeFind: '關閉尋找列', font: 'Margin Traditional', glyphs: '檔案與儲存'},
@@ -62,6 +64,8 @@ async function launch(systemLocale = 'zh-CN') {
   const address = `http://127.0.0.1:${port}`
   console.log(`Launching ${packageForm} on ${process.platform}/${process.arch} with system locale ${systemLocale}`)
   let launchError
+  // A forced shutdown can leave the NSIS extraction behind. Give each launch its own temporary directory.
+  if (portable) portableTemp = await fs.mkdtemp(path.join(temp, 'portable-runtime-'))
   child = spawn(executable, [
     `--remote-debugging-port=${port}`,
     '--disable-background-networking',
@@ -71,6 +75,7 @@ async function launch(systemLocale = 'zh-CN') {
   ], {
     env: {
       ...process.env,
+      ...(portableTemp ? {TEMP: portableTemp, TMP: portableTemp} : {}),
       MARGIN_PROFILE: profile,
       MARGIN_TEST_LOCALE: systemLocale,
       HTTPS_PROXY: 'http://127.0.0.1:9',
@@ -83,13 +88,20 @@ async function launch(systemLocale = 'zh-CN') {
   exited = once(child, 'exit').catch(() => {})
   child.on('error', error => { launchError = error })
   for (const pipe of [child.stdout, child.stderr]) pipe.on('data', data => { output = (output + data).slice(-10000) })
-  for (let n = 0; n < 100; n++) {
+  const startupBudget = portable ? 50000 : 22000
+  const deadline = Date.now() + startupBudget
+  let ready = false
+  while (Date.now() < deadline) {
     if (launchError) throw launchError
     if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Margin exited with ${child.exitCode ?? child.signalCode}`)
-    try { if ((await fetch(`${address}/json/version`, {signal: AbortSignal.timeout(350)})).ok) break }
+    try {
+      ready = (await fetch(`${address}/json/version`, {signal: AbortSignal.timeout(350)})).ok
+      if (ready) break
+    }
     catch { /* The packaged app may still be starting. */ }
-    await new Promise(resolve => setTimeout(resolve, 180))
+    await delay(180)
   }
+  assert.ok(ready, `${packageForm} did not start within ${startupBudget / 1000}s with system locale ${systemLocale}`)
   browser = await chromium.connectOverCDP(address, {timeout: 7000})
   const context = browser.contexts()[0]
   await context.route(/^https?:/, route => route.abort())
@@ -113,6 +125,11 @@ async function shutdown() {
   child = undefined
   browser = undefined
   page = undefined
+  if (portableTemp) {
+    assert.equal(path.dirname(portableTemp), temp)
+    await fs.rm(portableTemp, {recursive: true, force: true, maxRetries: 8, retryDelay: 250})
+    portableTemp = undefined
+  }
 }
 
 async function openLanguageSettings(chinese) {
@@ -153,7 +170,7 @@ const watchdog = setTimeout(() => {
   stopApplication(true)
   console.error(`Packaged application validation timed out.\n${output}`)
   process.exit(1)
-}, 220000)
+}, portable ? 420000 : 220000)
 
 try {
   await launch()

@@ -54,7 +54,7 @@ jobs:
       - name: Accept Windows offline packages
         if: matrix.platform == 'win'
         shell: pwsh
-        timeout-minutes: 9
+        timeout-minutes: 12
         run: ./tests/accept-windows.ps1 -Arch ${{ matrix.arch }} -Evidence acceptance
       - name: Accept macOS and Linux offline packages
         if: matrix.platform != 'win'
