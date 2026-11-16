@@ -52,10 +52,54 @@ let newPid
 let installedLegacyDeb = false
 let oldTarget
 
-function powerShell(script, extraEnv) {
+function powerShell(script, extraEnv, timeout = 120000) {
   return execute('pwsh', ['-NoProfile', '-NonInteractive', '-Command', script], {
-    env: {...process.env, ...extraEnv}, timeout: 120000, windowsHide: true,
+    env: {...process.env, ...extraEnv}, timeout, windowsHide: true,
   })
+}
+
+async function windowsSetupState() {
+  const work = (await fs.readdir(profile, {withFileTypes: true}))
+    .filter(entry => entry.isDirectory() && entry.name.startsWith('.margin-install-'))
+  const attempts = await Promise.all(work.map(async ({name}) => {
+    const directory = path.join(profile, name)
+    const markers = await fs.readdir(directory).catch(() => [])
+    const helper = Number(await fs.readFile(path.join(directory, 'helper-pid'), 'utf8').catch(() => null))
+    return {
+      helperPid: Number.isSafeInteger(helper) && helper > 0 ? helper : undefined,
+      markers: markers.filter(marker => /^[a-z][a-z.-]*$/.test(marker)).sort(),
+    }
+  }))
+  const {stdout} = await powerShell(String.raw`
+    $root = $env:MARGIN_SETUP_DIAGNOSTIC_ROOT
+    $target = $env:MARGIN_SETUP_DIAGNOSTIC_TARGET
+    $tracked = @($env:MARGIN_SETUP_DIAGNOSTIC_PIDS -split ',' | ForEach-Object { [uint32]$_ })
+    $installed = Get-Item -LiteralPath $target -ErrorAction SilentlyContinue
+    $processes = @()
+    try {
+      $processes = @(Get-CimInstance -ClassName Win32_Process -Property ProcessId,ParentProcessId,Name,ExecutablePath -OperationTimeoutSec 4 -ErrorAction Stop)
+    } catch {}
+    $prefix = $root + [IO.Path]::DirectorySeparatorChar
+    $tracked += @($processes | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object ProcessId)
+    do {
+      $children = @($processes | Where-Object { $_.ParentProcessId -in $tracked -and $_.ProcessId -notin $tracked })
+      $tracked += @($children | ForEach-Object ProcessId)
+    } while ($children.Count)
+    @{
+      installed = @{ path = [IO.Path]::GetRelativePath($root, $target); version = $installed.VersionInfo.FileVersion }
+      processes = @($processes | Where-Object { $_.ProcessId -in $tracked } | ForEach-Object {
+        @{ name = $_.Name; pid = $_.ProcessId; parent = $_.ParentProcessId }
+      })
+    } | ConvertTo-Json -Depth 5 -Compress
+  `, {
+    MARGIN_SETUP_DIAGNOSTIC_ROOT: temp,
+    MARGIN_SETUP_DIAGNOSTIC_TARGET: oldTarget,
+    MARGIN_SETUP_DIAGNOSTIC_PIDS: [oldPid, ...attempts.map(attempt => attempt.helperPid)].filter(Boolean).join(','),
+  }, 9000)
+  return {
+    ...JSON.parse(stdout), attempts,
+    updateSnapshotExists: Boolean(await fs.stat(path.join(profile, 'update-session.json')).catch(() => null)),
+  }
 }
 
 async function unpacked(root, prefix, filename) {
@@ -355,16 +399,19 @@ try {
       if (ready?.version === version && Number.isSafeInteger(ready.pid)) newPid = ready.pid
       try { return (await fetch(`${address}/json/version`, {signal: AbortSignal.timeout(350)})).ok }
       catch { return false }
-    }, {timeout: 120000}).toBe(true)
+    }, {timeout: form === 'setup' ? 255000 : 120000}).toBe(true)
   } catch (error) {
     const result = await json(resultFile).catch(() => null)
     const ready = await json(readyFile).catch(() => null)
     const database = form === 'deb'
       ? (await execute('dpkg-query', ['-W', '-f=${db:Status-Status} ${Version} ${Architecture}', packageName]).catch(() => null))?.stdout.trim()
       : undefined
+    const setup = form === 'setup'
+      ? await windowsSetupState().catch(error => ({probeError: error.code || error.name}))
+      : undefined
     throw new Error(`${form}: application did not restart (${JSON.stringify({
       status: result?.status, version: result?.version, message: result?.message, diagnostic: result?.diagnostic,
-      readyVersion: ready?.version, readyPid: ready?.pid, database, restartPort,
+      readyVersion: ready?.version, readyPid: ready?.pid, database, setup, restartPort,
     })})`, {cause: error})
   }
   restartedBrowser = await chromium.connectOverCDP(address, {timeout: 15000})

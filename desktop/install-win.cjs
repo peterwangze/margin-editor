@@ -94,6 +94,10 @@ $prepared = $false
 $approved = $false
 $rollbackNeeded = $false
 $newApp = $null
+$installer = $null
+$installerExit = $null
+$phase = 'initializing'
+$scope = $null
 
 function Is-Version([string] $file, [string] $version) {
     if (-not [IO.File]::Exists($file)) { return $false }
@@ -111,7 +115,9 @@ function Read-Sha256([string] $file) {
 function Write-Result([string] $status, [string] $message = '') {
     $tempResult = $result + '.' + $spec.parentPid + '.tmp'
     try {
-        $json = @{status = $status; version = $spec.artifact.version; message = $message} | ConvertTo-Json -Compress
+        $installerPid = if ($null -ne $installer) { $installer.Id } else { $null }
+        $diagnostic = @{phase = $phase; helperPid = $PID; installerPid = $installerPid; installerExit = $installerExit; scope = $scope}
+        $json = @{status = $status; version = $spec.artifact.version; message = $message; diagnostic = $diagnostic} | ConvertTo-Json -Compress
         [IO.File]::WriteAllText($tempResult, $json)
         if ([IO.File]::Exists($result)) {
             try { [IO.File]::Replace($tempResult, $result, [NullString]::Value) }
@@ -121,6 +127,11 @@ function Write-Result([string] $status, [string] $message = '') {
     } finally {
         if ([IO.File]::Exists($tempResult)) { [IO.File]::Delete($tempResult) }
     }
+}
+
+function Mark-Installing {
+    # A diagnostic write must not interrupt the authorized handoff.
+    try { Write-Result 'installing' } catch {}
 }
 
 function Is-RegisteredInstall([Microsoft.Win32.RegistryHive] $hive, [string] $directory, [string] $scope) {
@@ -167,17 +178,36 @@ function Wait-ForMarginProcesses {
     throw 'Another Margin process is still using the installation.'
 }
 
-function Install-Setup([string] $scope) {
-    # Let NSIS elevate its install process for a registered all-users install.
+function Start-Setup([string] $scope) {
     # /D must be the last argument and unquoted, including spaces.
     $directory = [IO.Path]::GetDirectoryName($spec.target)
-    $arguments = '--updated /S ' + $scope + ' /D=' + $directory
-    $installer = Start-Process -FilePath $staged -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
-    if ($installer.ExitCode -eq 1223 -or ($installer.ExitCode -eq 0 -and (Is-Version $spec.target $spec.currentVersion))) {
+    $setup = @{
+        FilePath = $staged
+        ArgumentList = '--updated /S ' + $scope + ' /D=' + $directory
+        WindowStyle = 'Hidden'
+        PassThru = $true
+    }
+    # Ask for elevation before starting Setup so the process we wait for is the real installer.
+    if ($scope -eq '/allusers') { $setup.Verb = 'RunAs' }
+    try {
+        return Start-Process @setup
+    } catch {
+        $failure = $_.Exception
+        while ($null -ne $failure.InnerException) { $failure = $failure.InnerException }
+        if ($failure -is [ComponentModel.Win32Exception] -and $failure.NativeErrorCode -eq 1223) {
+            throw [OperationCanceledException]::new('The installer was cancelled or skipped.')
+        }
+        throw
+    }
+}
+
+function Confirm-Setup([int] $exitCode) {
+    if ($exitCode -eq 1223 -or ($exitCode -eq 0 -and (Is-Version $spec.target $spec.currentVersion))) {
         throw [OperationCanceledException]::new('The installer was cancelled or skipped.')
     }
-    if ($installer.ExitCode -ne 0 -or -not (Is-Version $spec.target $spec.artifact.version)) {
-        throw ('Setup did not finish with the expected installed version (exit {0}).' -f $installer.ExitCode)
+    $asar = Join-Path ([IO.Path]::GetDirectoryName($spec.target)) 'resources\app.asar'
+    if ($exitCode -ne 0 -or -not (Is-Version $spec.target $spec.artifact.version) -or -not [IO.File]::Exists($asar)) {
+        throw ('Setup did not finish with the expected installed version (exit {0}).' -f $exitCode)
     }
 }
 
@@ -260,21 +290,39 @@ try {
         Start-Sleep -Milliseconds 100
     }
     if (-not $approved) { throw 'Margin did not confirm the Windows installer handoff.' }
+    $phase = 'waiting-for-parent'
+    Mark-Installing
     if (-not $parent.WaitForExit(120000)) { throw 'Margin did not close before the installation began.' }
     $parentExited = $true
 
     if ($spec.portable) {
+        $phase = 'replacing-portable'
+        Mark-Installing
         $rollbackNeeded = $true
         Install-Portable
         if (-not (Is-Version $spec.target $spec.artifact.version)) { throw 'The new portable executable could not be verified.' }
     } else {
+        $phase = 'waiting-for-editor-processes'
+        Mark-Installing
         Wait-ForMarginProcesses
-        Install-Setup $scope
+        $phase = 'starting-setup'
+        Mark-Installing
+        $installer = Start-Setup $scope
+        $phase = 'waiting-for-setup'
+        Mark-Installing
+        if (-not $installer.WaitForExit(180000)) { throw 'Windows Setup did not finish within three minutes.' }
+        $installerExit = $installer.ExitCode
+        $phase = 'setup-exited'
+        Mark-Installing
+        Confirm-Setup $installerExit
     }
-    # A stale result must not appear in the newly launched app.
-    Write-Result 'installing'
+    $phase = 'launching'
+    Mark-Installing
     $newApp = Launch-Margin $spec.token
+    $phase = 'waiting-for-readiness'
+    Mark-Installing
     Wait-ForStartup $newApp
+    $phase = 'ready'
     Write-Result 'installed'
     $rollbackNeeded = $false
     $completedHandoff = $true
@@ -285,6 +333,7 @@ try {
     } else {
         $status = if ($_.Exception -is [OperationCanceledException]) { 'cancelled' } else { 'failed' }
         $newAppStillRunning = $null -ne $newApp -and -not $newApp.HasExited
+        $installerStillRunning = $null -ne $installer -and -not $installer.HasExited
         if ($rollbackNeeded -and -not $newAppStillRunning) {
             try { Restore-Portable; $rollbackNeeded = $false }
             catch { $message += ' The previous portable executable is retained in ' + $previous }
@@ -292,7 +341,7 @@ try {
             $message += ' The previous portable executable is retained in ' + $previous
         }
         try { Write-Result $status $message } catch {}
-        if ($newAppStillRunning) {
+        if ($newAppStillRunning -or $installerStillRunning) {
             Show-InstallError $message
         } elseif ($parentExited) {
             try {
@@ -308,7 +357,7 @@ try {
     }
 } finally {
     if ($prepared) {
-        if ([IO.File]::Exists($staged)) { [IO.File]::Delete($staged) }
+        if ([IO.File]::Exists($staged) -and ($null -eq $installer -or $installer.HasExited)) { [IO.File]::Delete($staged) }
         if ($completedHandoff -and [IO.File]::Exists($previous)) { [IO.File]::Delete($previous) }
         if ([IO.File]::Exists($ready)) { [IO.File]::Delete($ready) }
         if ([IO.File]::Exists($approvedFile)) { [IO.File]::Delete($approvedFile) }
@@ -316,7 +365,9 @@ try {
         if ([IO.File]::Exists($pidFile)) { [IO.File]::Delete($pidFile) }
         $workerStarted = Join-Path $spec.work 'worker-started'
         if ([IO.File]::Exists($workerStarted)) { [IO.File]::Delete($workerStarted) }
-        if (-not [IO.File]::Exists($previous) -and -not [IO.File]::Exists($prepareError)) { [IO.Directory]::Delete($spec.work, $false) }
+        if (-not [IO.File]::Exists($previous) -and -not [IO.File]::Exists($prepareError) -and -not [IO.File]::Exists($staged)) {
+            [IO.Directory]::Delete($spec.work, $false)
+        }
     }
     if ($spec.workerFile) {
         try {
