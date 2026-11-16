@@ -13,7 +13,7 @@ jobs:
   build:
     name: ${{ matrix.platform }} ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 35
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -60,6 +60,40 @@ jobs:
         if: matrix.platform != 'win'
         timeout-minutes: 9
         run: bash tests/accept-unix.sh ${{ matrix.platform }} ${{ matrix.arch }} "$PWD/acceptance"
+      - name: Build earlier version for native upgrade acceptance
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          set -euo pipefail
+          manifest=$(mktemp)
+          cp package.json "$manifest"
+          trap 'cp "$manifest" package.json; rm -f -- "$manifest"' EXIT
+          node -e 'const fs = require("node:fs"); const manifest = require("./package.json"); manifest.version = "1.6.99"; fs.writeFileSync("package.json", JSON.stringify(manifest, null, 2) + "\n")'
+          npm run build
+          extra=()
+          if [[ "${{ matrix.platform }}" == mac ]]; then extra+=(--dir); fi
+          npm run package -- --${{ matrix.platform }} --${{ matrix.arch }} --config.directories.output=release/upgrade-baseline "${extra[@]}"
+      - name: Accept upgrade and restart from the candidate packages
+        timeout-minutes: 11
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- package.json package-lock.json
+          case "${{ matrix.platform }}" in
+            win)
+              node tests/accept-upgrade.mjs setup
+              node tests/accept-upgrade.mjs portable
+              ;;
+            mac)
+              node tests/accept-upgrade.mjs dmg
+              ;;
+            linux)
+              sudo unshare --net bash -c '
+                ip link set lo up
+                runuser -u "$1" -- xvfb-run -a "$2" tests/accept-upgrade.mjs deb &&
+                runuser -u "$1" -- xvfb-run -a "$2" tests/accept-upgrade.mjs appimage
+              ' bash "$(id -un)" "$(command -v node)"
+              ;;
+          esac
       - uses: actions/upload-artifact@v4
         if: success() || failure()
         with:

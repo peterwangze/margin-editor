@@ -270,7 +270,7 @@ export function useDocuments(api, notify) {
     if (value.settings && typeof value.settings === 'object') setSettings({...defaults, ...value.settings})
     if (Array.isArray(value.macros)) setMacros(value.macros)
     if (Array.isArray(value.recent)) setRecent(value.recent)
-    if (value.settings?.recover === false) return
+    if (value.settings?.recover === false && value.resumeAfterUpdate !== true) return
     if (restored.length) {
       commit(() => restored)
       setMain(restored.find(item => item.id === value.main)?.id ?? restored[0].id)
@@ -344,7 +344,13 @@ export function useDocuments(api, notify) {
     return {count: changed.size, skipped, recovered}
   }
 
-  snapshot.current = () => ({version: 1, docs: settings.recover ? docsRef.current.map(doc => ({...doc, cursor: cursors.current.get(doc.id) ?? doc.cursor, savedText: doc.savedText === doc.text ? undefined : doc.savedText})) : [], main, secondary, split, slot, workspace, settings, recent, macros})
+  snapshot.current = (includeDocuments = settings.recover) => ({version: 1, docs: includeDocuments ? docsRef.current.map(doc => ({...doc, cursor: cursors.current.get(doc.id) ?? doc.cursor, savedText: doc.savedText === doc.text ? undefined : doc.savedText})) : [], main, secondary, split, slot, workspace, settings, recent, macros})
+  async function installUpdate(version) {
+    if (!ready || saving.current.size || closingTabs.current) {
+      throw new Error('Finish saving or closing documents before installing the update.')
+    }
+    await api.installUpdate(version, snapshot.current(true))
+  }
   const persist = () => {
     const value = snapshot.current()
     if (api) return api.storeSession(value)
@@ -415,5 +421,5 @@ export function useDocuments(api, notify) {
     return () => clearTimeout(timer)
   }, [ready, docs, main, secondary, split, workspace, settings, recent, macros])
 
-  return {docs, docsRef, main, secondary, slot, setSlot, split, workspace, entries, recent, settings, setSettings, macros, setMacros, doc, current, commit, amend, attach, views, cursors, selectedView, focus, add, create, open, openBrowser, openPath, openPaths, setFolder, pickFolder, save, reload, readPage, confirm, close, reopen, reorder, changeSplit, fileInput, snapshot, applySession, importNotepadSession}
+  return {docs, docsRef, main, secondary, slot, setSlot, split, workspace, entries, recent, settings, setSettings, macros, setMacros, doc, current, commit, amend, attach, views, cursors, selectedView, focus, add, create, open, openBrowser, openPath, openPaths, setFolder, pickFolder, save, reload, readPage, confirm, close, reopen, reorder, changeSplit, fileInput, snapshot, installUpdate, applySession, importNotepadSession}
 }

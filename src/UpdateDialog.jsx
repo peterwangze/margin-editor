@@ -2,7 +2,7 @@ import {useEffect, useMemo, useState} from 'react'
 import DOMPurify from 'dompurify'
 import {marked} from 'marked'
 import {Dialog} from './panels'
-import {useLocale} from './i18n'
+import {errorMessage, useLocale} from './i18n'
 import './update.css'
 
 const releaseNoteTags = [
@@ -31,7 +31,7 @@ function formatPackageSize(bytes, locale) {
   return new Intl.NumberFormat(locale, {style: 'unit', unit, maximumFractionDigits: 1}).format(bytes / scale)
 }
 
-export function UpdateDialog({api, version, close, openLatest}) {
+export function UpdateDialog({api, version, close, openLatest, install}) {
   const {t, locale} = useLocale()
   const [release, setRelease] = useState(null)
   const [checkFailed, setCheckFailed] = useState(false)
@@ -41,7 +41,8 @@ export function UpdateDialog({api, version, close, openLatest}) {
   const checking = canCheck && !release && !checkFailed
   const available = release?.status === 'available'
   const asset = available ? release.asset : null
-  const transferring = transfer.phase === 'downloading' || transfer.phase === 'showing'
+  const installing = transfer.phase === 'installing'
+  const transferring = transfer.phase === 'downloading' || transfer.phase === 'showing' || installing
 
   useEffect(() => {
     if (!api?.checkForUpdates) return
@@ -85,11 +86,29 @@ export function UpdateDialog({api, version, close, openLatest}) {
     }
   }
 
+  async function installDownloaded() {
+    if (!transfer.path || transferring) return
+    setTransfer({...transfer, phase: 'installing'})
+    try {
+      await install(release.latestVersion)
+    } catch (error) {
+      const actionable = [
+        'Finish saving or closing documents before installing the update.',
+        'The session exceeds the recovery snapshot limit. Save some documents.',
+      ]
+      const message = actionable.some(value => error?.message?.endsWith(value))
+        ? errorMessage(t, error)
+        : t('Could not start the installation. Your documents are still open.')
+      setTransfer({...transfer, phase: 'installError', message})
+    }
+  }
+
   let status
   if (!canCheck) status = t('Update checks and downloads are available in the desktop app.')
   else if (checking) status = t('Checking for updates…')
   else if (transfer.phase === 'downloading') status = t('Downloading and verifying the package…')
-  else if (transfer.path) status = t('Download verified. Open its folder to install the update.')
+  else if (installing) status = t('Preparing the update. Margin will restart…')
+  else if (transfer.path) status = t('Download verified. The update is ready to install.')
   else if (available) status = t('An update is available.')
   else if (release?.status === 'current') status = t('Margin is up to date.')
   else if (release?.status === 'ahead') status = t('This installation is newer than the latest release.')
@@ -98,10 +117,11 @@ export function UpdateDialog({api, version, close, openLatest}) {
   if (checkFailed) error = t('Could not check for updates.')
   else if (transfer.phase === 'downloadError') error = t('Could not download the update.')
   else if (transfer.phase === 'folderError') error = t('Could not show the downloaded package.')
+  else if (transfer.phase === 'installError') error = transfer.message
 
   const size = formatPackageSize(asset?.size, locale)
 
-  return <Dialog label="Check for updates" close={close} className="update-dialog">
+  return <Dialog label="Check for updates" close={close} closeDisabled={installing} className="update-dialog">
     <div className="form update-content">
       <dl className="update-versions">
         <div><dt>{t('Current version')}</dt><dd><bdi dir="ltr">{release?.currentVersion ?? version}</bdi></dd></div>
@@ -121,10 +141,11 @@ export function UpdateDialog({api, version, close, openLatest}) {
         {asset && !transfer.path && <button type="button" className="primary-button" disabled={transferring} onClick={download}>
           {transfer.phase === 'downloadError' ? t('Try again') : t('Download update')}
         </button>}
-        {transfer.path && <button type="button" className="primary-button" disabled={transferring} onClick={showFolder}>
+        {transfer.path && install && <button type="button" className="primary-button" disabled={transferring} onClick={installDownloaded}>{t('Install and restart')}</button>}
+        {transfer.path && <button type="button" className="outline-button" disabled={transferring} onClick={showFolder}>
           {transfer.phase === 'folderError' ? t('Try again') : t('Show in folder')}
         </button>}
-        <button type="button" className="outline-button" onClick={openLatest}>{t('View latest release')}</button>
+        <button type="button" className="outline-button" disabled={installing} onClick={openLatest}>{t('View latest release')}</button>
       </div>
       {available && release.notes?.trim() && <ReleaseNotes notes={release.notes} />}
     </div>

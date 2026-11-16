@@ -1,6 +1,6 @@
 const {createHash, randomUUID} = require('node:crypto')
 const fs = require('node:fs/promises')
-const {constants} = require('node:fs')
+const {constants, createReadStream} = require('node:fs')
 const path = require('node:path')
 const {Transform} = require('node:stream')
 const {pipeline} = require('node:stream/promises')
@@ -171,6 +171,16 @@ function createUpdater({
   let check
   let download
 
+  async function checkedDownload() {
+    if (!lastDownloaded) throw new Error('The downloaded update file could not be found.')
+    const {path: file, stat} = lastDownloaded
+    const current = await fs.lstat(file).catch(() => null)
+    if (!current?.isFile() || ['dev', 'ino', 'size', 'mtimeMs'].some(key => current[key] !== stat[key])) {
+      throw new Error('The downloaded update file could not be found.')
+    }
+    return lastDownloaded
+  }
+
   return {
     checkForUpdates() {
       if (!check) {
@@ -189,21 +199,35 @@ function createUpdater({
         throw new Error('Check for updates again before downloading.')
       }
       if (download) throw new Error('An update download is already in progress.')
-      const promise = saveDownload(fetch, getDownloads(), selection.download).then(saved => {
-        lastDownloaded = saved
+      const asset = selection.download
+      const promise = saveDownload(fetch, getDownloads(), asset).then(saved => {
+        lastDownloaded = {...saved, version: latestVersion, asset}
         return {path: saved.path}
       }).finally(() => { download = null })
       download = {version: latestVersion, promise}
       return promise
     },
     async showDownloadedUpdate() {
-      if (!lastDownloaded) throw new Error('The downloaded update file could not be found.')
-      const {path: file, stat} = lastDownloaded
-      const current = await fs.lstat(file).catch(() => null)
-      if (!current?.isFile() || ['dev', 'ino', 'size', 'mtimeMs'].some(key => current[key] !== stat[key])) {
-        throw new Error('The downloaded update file could not be found.')
-      }
+      const {path: file} = await checkedDownload()
       showItemInFolder(file)
+    },
+    async installableUpdate(version) {
+      const saved = await checkedDownload()
+      if (saved.version !== version || compareToStable(getVersion(), version) >= 0) {
+        throw new Error('Check for updates again before installing.')
+      }
+      const {size, digest} = saved.asset
+      const hash = createHash('sha256')
+      let bytes = 0
+      for await (const chunk of createReadStream(saved.path)) {
+        bytes += chunk.length
+        if (bytes > size) throw new Error('The update download did not match its published checksum or size.')
+        hash.update(chunk)
+      }
+      if (bytes !== size || hash.digest('hex') !== digest) {
+        throw new Error('The update download did not match its published checksum or size.')
+      }
+      return {path: saved.path, version, size, digest}
     },
   }
 }

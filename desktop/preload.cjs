@@ -2,6 +2,8 @@ const {contextBridge, ipcRenderer, webUtils} = require('electron')
 
 const handlers = ['pickFiles', 'pickFolder', 'open', 'largePage', 'largeSearch', 'cancelLargeSearch', 'resolveSessionPath', 'save', 'saveDialog', 'entries', 'changed', 'loadSession', 'storeSession', 'search', 'cancelSearch', 'replace', 'clipboard', 'print', 'reveal', 'rename', 'trash', 'run', 'hash', 'initial', 'confirm', 'titleStyle', 'openExternal', 'closeReply', 'interfaceLanguage', 'systemLanguages', 'setInterfaceLanguage', 'checkForUpdates', 'downloadUpdate', 'showDownloadedUpdate']
 const api = Object.fromEntries(handlers.map(name => [name, (...args) => ipcRenderer.invoke(`margin:${name}`, ...args)]))
+api.installUpdate = (version, session) => ipcRenderer.invoke('margin:installUpdate', version, session)
+api.updateInstallResult = () => ipcRenderer.invoke('margin:updateInstallResult')
 api.pathsFor = files => Array.from(files, file => webUtils.getPathForFile(file))
 api.platform = process.platform
 api.onOpen = callback => {

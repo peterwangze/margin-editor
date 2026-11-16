@@ -48,6 +48,11 @@ function App() {
     noticeTimer.current = setTimeout(() => setNotice(null), 4300)
   }
   useEffect(() => { setNotice(current => current?.locale === locale ? current : null) }, [locale])
+  useEffect(() => {
+    api?.updateInstallResult?.().then(status => {
+      if (status) notify(t('The update did not finish. Your session was restored.'))
+    }).catch(() => {})
+  }, [api])
   const m = useDocuments(api, notify)
   const find = useFind(m.doc, m.selectedView, notify)
   const [panel, setPanel] = useState('')
@@ -357,7 +362,7 @@ function App() {
         </div>
       </div>
     </Dialog>}
-    {dialog?.kind === 'updates' && <UpdateDialog api={api} version={version} close={closeDialog} openLatest={openLatestRelease} />}
+    {dialog?.kind === 'updates' && <UpdateDialog api={api} version={version} close={closeDialog} openLatest={openLatestRelease} install={api?.installUpdate && m.installUpdate} />}
     {dialog?.kind === 'inspect-text' && <TextInspector snapshot={dialog.snapshot} close={closeDialog} />}
     {dialog?.kind === 'open-search' && <OpenSearch docs={m.docs} focus={m.focus} close={closeDialog} />}
     {dialog?.kind === 'large-search' && <LargeSearch api={api} doc={m.doc} close={closeDialog} initialQuery={find.query} jump={match => safe(async () => { await m.readPage(m.doc, match.page, match); m.selectedView()?.focus() })} />}

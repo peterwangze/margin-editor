@@ -63,6 +63,21 @@ jobs:
                 index("interface language and persistence") != null)
             ' "$dir/$form.json"
           }
+          verify_upgrade() {
+            local platform=$1 arch=$2 form=$3 node_platform=$4 asset=$5
+            local dir="evidence/acceptance-$platform-$arch"
+            local sha
+            sha=$(sha256sum -- "packages/$asset" | cut -d ' ' -f 1)
+            test -s "$dir/upgrade-$form.png"
+            jq -e --arg platform "$node_platform" --arg arch "$arch" --arg form "$form" \
+              --arg version "$version" --arg asset "$asset" --arg sha "$sha" '
+              .platform == $platform and .arch == $arch and .form == $form and
+              .previous == "1.6.99" and .version == $version and .assetName == $asset and .sha256 == $sha and
+              .failedDownloadPreservedOriginal == true and .tamperedPackagePreservedOriginal == true and .verifiedDownload == true and
+              .newProcess == true and .nativeInstallation == true and .restoredDraft == true and
+              .restoredFiles == true and .restoredSettings == true and .oneTimeRecovery == true
+            ' "$dir/upgrade-$form.json"
+          }
           for arch in x64 arm64; do
             deb_arch=$arch
             appimage_arch=$arch
@@ -82,6 +97,11 @@ jobs:
             verify_evidence mac "$arch" zip darwin
             verify_evidence linux "$arch" appimage linux
             verify_evidence linux "$arch" deb linux
+            verify_upgrade win "$arch" setup win32 "Margin-$version-win-$arch-setup.exe"
+            verify_upgrade win "$arch" portable win32 "Margin-$version-win-$arch-portable.exe"
+            verify_upgrade mac "$arch" dmg darwin "Margin-$version-mac-$arch.dmg"
+            verify_upgrade linux "$arch" deb linux "Margin-$version-linux-$deb_arch.deb"
+            verify_upgrade linux "$arch" appimage linux "Margin-$version-linux-$appimage_arch.AppImage"
           done
           (cd evidence && zip -rq ../packages/ACCEPTANCE.zip acceptance-*)
           cd packages

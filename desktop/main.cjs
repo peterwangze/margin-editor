@@ -31,6 +31,8 @@ let sessionQueue = Promise.resolve()
 let closing = false
 let closeAllowed = false
 let quitRequested = false
+let preparingInstall = false
+let loadedUpdateSession = false
 let uiPreference = 'system'
 let uiLocale
 let languageQueue = Promise.resolve()
@@ -38,6 +40,19 @@ const files = import('./files.mjs')
 const language = import('../shared/locale.mjs')
 
 const languagePath = () => path.join(app.getPath('userData'), 'ui-language.json')
+const updateSessionPath = () => path.join(app.getPath('userData'), 'update-session.json')
+const updateResultPath = () => path.join(app.getPath('userData'), 'update-install-result.json')
+
+function sessionJson(session) {
+  const json = JSON.stringify(session)
+  if (Buffer.byteLength(json) > 160 * 1024 * 1024) throw new Error('The session exceeds the recovery snapshot limit. Save some documents.')
+  return json
+}
+
+async function readJson(file) {
+  try { return JSON.parse(await fs.readFile(file, 'utf8')) }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error }
+}
 
 async function writeProfile(file, data) {
   const {atomicWrite} = await files
@@ -152,6 +167,7 @@ async function createWindow() {
   window.on('close', event => {
     if (closeAllowed || !hasRenderer || window.webContents.isCrashed()) return
     event.preventDefault()
+    if (preparingInstall) return
     if (!closing) { closing = true; window.webContents.send('margin:beforeClose') }
   })
   window.on('closed', () => { hasRenderer = false; window = null; searchJob?.cancel(); largeSearchJob?.cancel() })
@@ -162,6 +178,59 @@ const actions = {
   checkForUpdates: updater.checkForUpdates,
   downloadUpdate: updater.downloadUpdate,
   showDownloadedUpdate: updater.showDownloadedUpdate,
+  async installUpdate(version, session) {
+    if (!app.isPackaged || preparingInstall || applying || closing || !hasRenderer || session?.version !== 1 || !Array.isArray(session.docs)) {
+      throw new Error('Update installation is unavailable while the application is busy.')
+    }
+    preparingInstall = true
+    let helper
+    let savedSession = false
+    try {
+      const artifact = await updater.installableUpdate(version)
+      const profile = app.getPath('userData')
+      const debugPort = app.commandLine.getSwitchValue('remote-debugging-port')
+      const relaunchArgs = process.env.MARGIN_PROFILE && process.env.MARGIN_TEST_LOCALE && /^[1-9]\d*$/.test(debugPort)
+        ? [`--remote-debugging-port=${debugPort}`]
+        : []
+      if (process.platform === 'win32') {
+        const {startWindowsInstall} = require('./install-win.cjs')
+        helper = {start: () => startWindowsInstall({
+          artifact, executable: process.execPath, portableLauncher: process.env.PORTABLE_EXECUTABLE_FILE,
+          profile, currentVersion: app.getVersion(), parentPid: process.pid, relaunchArgs,
+        })}
+      } else {
+        const {prepareUnixInstall} = require('./install-unix.cjs')
+        helper = await prepareUnixInstall({
+          assetPath: artifact.path, latestVersion: version, size: artifact.size, digest: artifact.digest,
+          platform: process.platform, execPath: process.execPath, env: process.env, oldPid: process.pid, relaunchArgs, profile,
+        })
+      }
+      await sessionQueue.catch(() => {})
+      await languageQueue.catch(() => {})
+      await writeProfile(languagePath(), JSON.stringify({preference: uiPreference}))
+      await writeProfile(updateSessionPath(), sessionJson({
+        ...session, resumeAfterUpdate: true, updateFromVersion: app.getVersion(), updateToVersion: version,
+      }))
+      savedSession = true
+      await helper.start()
+    } catch (error) {
+      await helper?.cleanup?.().catch(console.error)
+      if (savedSession) await fs.unlink(updateSessionPath()).catch(console.error)
+      preparingInstall = false
+      throw error
+    }
+    closeAllowed = true
+    setImmediate(() => app.quit())
+  },
+  async updateInstallResult() {
+    const file = updateResultPath()
+    const result = await readJson(file)
+    if (result?.status === 'failed' || result?.status === 'cancelled') {
+      await fs.unlink(file)
+      return result.status
+    }
+    return null
+  },
   interfaceLanguage() { return {preference: uiPreference, systemLanguages: systemLanguages()} },
   async systemLanguages() { await applyInterfaceLanguage(); return systemLanguages() },
   async setInterfaceLanguage(preference) {
@@ -232,14 +301,25 @@ const actions = {
     return states.filter(Boolean)
   },
   async loadSession() {
-    try { return JSON.parse(await fs.readFile(path.join(app.getPath('userData'), 'session.json'), 'utf8')) }
-    catch (error) { if (error.code === 'ENOENT') return null; throw error }
+    const update = await readJson(updateSessionPath())
+    if (update?.version === 1 && update.resumeAfterUpdate === true &&
+      [update.updateFromVersion, update.updateToVersion].includes(app.getVersion())) {
+      loadedUpdateSession = true
+      return update
+    }
+    return readJson(path.join(app.getPath('userData'), 'session.json'))
   },
   async storeSession(session) {
+    if (preparingInstall) return
     const file = path.join(app.getPath('userData'), 'session.json')
-    const json = JSON.stringify(session)
-    if (Buffer.byteLength(json) > 160 * 1024 * 1024) throw new Error('The session exceeds the recovery snapshot limit. Save some documents.')
-    const next = sessionQueue.catch(() => {}).then(() => writeProfile(file, json))
+    const json = sessionJson(session)
+    const next = sessionQueue.catch(() => {}).then(async () => {
+      await writeProfile(file, json)
+      if (loadedUpdateSession) {
+        await fs.unlink(updateSessionPath()).catch(error => { if (error.code !== 'ENOENT') throw error })
+        loadedUpdateSession = false
+      }
+    })
     sessionQueue = next
     return next
   },
@@ -258,7 +338,7 @@ const actions = {
   },
   cancelSearch() { searchJob?.cancel() },
   async replace(token, selected) {
-    if (!plan || plan.token !== token || applying) throw new Error('Run Preview Replace before applying changes.')
+    if (!plan || plan.token !== token || applying || preparingInstall) throw new Error('Run Preview Replace before applying changes.')
     const {result, query} = plan
     plan = null
     applying = true
@@ -280,7 +360,16 @@ const actions = {
   trash(file) { return shell.trashItem(file) },
   run: runTool,
   hash(algorithm, value) { return createHash(algorithm).update(value).digest('hex') },
-  initial() { hasRenderer = true; return queued.splice(0) },
+  async initial() {
+    hasRenderer = true
+    const token = process.env.MARGIN_UPDATE_TOKEN
+    delete process.env.MARGIN_UPDATE_TOKEN
+    if (token && /^[0-9a-f-]{36}$/i.test(token)) {
+      const ready = path.join(app.getPath('userData'), 'update-install-ready.json')
+      await writeProfile(ready, JSON.stringify({token, version: app.getVersion(), pid: process.pid})).catch(console.error)
+    }
+    return queued.splice(0)
+  },
   closeReply(allowed) {
     closing = false
     if (!allowed) { quitRequested = false; return }
@@ -326,7 +415,7 @@ else {
     app.on('activate', () => { if (!window) createWindow().catch(console.error) })
   }).catch(error => { console.error(error); app.exit(1) })
   app.on('before-quit', event => {
-    if (applying) { quitRequested = false; event.preventDefault() }
+    if (applying || preparingInstall && !closeAllowed) { quitRequested = false; event.preventDefault() }
     else quitRequested = true
   })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })

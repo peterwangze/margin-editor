@@ -64,6 +64,7 @@ test('updater reports the stable version before allowing an explicit download, v
   assert.deepEqual(requested, [])
   await assert.rejects(updater.downloadUpdate(version), /Check for updates again/)
   await assert.rejects(updater.showDownloadedUpdate(), /could not be found/)
+  await assert.rejects(updater.installableUpdate(version), /could not be found/)
   assert.deepEqual(await updater.checkForUpdates(), {
     currentVersion: '1.9.0', latestVersion: version, status: 'available', notes: 'Release notes',
     asset: {name: filename, size: bytes.length},
@@ -79,10 +80,15 @@ test('updater reports the stable version before allowing an explicit download, v
   assert.deepEqual(followed, [host])
   assert.deepEqual(await fs.readFile(result.path), bytes)
   assert.equal(await fs.readFile(path.join(downloads, filename), 'utf8'), 'keep this file')
+  assert.deepEqual(await updater.installableUpdate(version), {
+    path: result.path, version, size: bytes.length, digest: digest.replace('sha256:', ''),
+  })
+  await assert.rejects(updater.installableUpdate('99.0.0'), /Check for updates again/)
   await updater.showDownloadedUpdate()
   assert.deepEqual(revealed, [result.path])
   await fs.unlink(result.path)
   await assert.rejects(updater.showDownloadedUpdate(), /could not be found/)
+  await assert.rejects(updater.installableUpdate(version), /could not be found/)
 })
 
 test('updater reports current and ahead without offering a file, and ignores unsafe or missing assets', async t => {

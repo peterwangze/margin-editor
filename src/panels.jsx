@@ -5,7 +5,7 @@ import {basename, documentTitle} from './documents'
 import {emptyQuery, encodings} from '../shared/text.mjs'
 import {errorMessage, interfaceLanguages, useLocale} from './i18n'
 
-export function Dialog({label, children, close, className = '', literalLabel = false}) {
+export function Dialog({label, children, close, className = '', literalLabel = false, closeDisabled = false}) {
   const {t} = useLocale()
   const title = literalLabel ? label : t(label)
   const ref = useRef(null)
@@ -17,8 +17,8 @@ export function Dialog({label, children, close, className = '', literalLabel = f
     input?.focus()
     return () => { element.close(); if (previous?.isConnected && document.activeElement === document.body) previous.focus() }
   }, [])
-  return <dialog className={`dialog ${className}`} ref={ref} aria-label={title} onCancel={event => { event.preventDefault(); close() }} onClick={event => { if (event.target === event.currentTarget) close() }}>
-    <div className="dialog-inner"><div className="dialog-head"><h2>{title}</h2><IconButton icon={X} label={t('Close dialog')} onClick={close} /></div>{children}</div>
+  return <dialog className={`dialog ${className}`} ref={ref} aria-label={title} onCancel={event => { event.preventDefault(); if (!closeDisabled) close() }} onClick={event => { if (!closeDisabled && event.target === event.currentTarget) close() }}>
+    <div className="dialog-inner"><div className="dialog-head"><h2>{title}</h2><IconButton icon={X} label={t('Close dialog')} onClick={close} disabled={closeDisabled} /></div>{children}</div>
   </dialog>
 }
 
