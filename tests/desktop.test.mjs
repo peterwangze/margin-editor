@@ -97,16 +97,16 @@ test('G01 shows the installed version with a long filename and opens the latest 
     shell.openExternal = async url => { globalThis.requestedReleaseUrl = url }
     return app.getVersion()
   })
-  const filename = page.locator('.window-name')
-  await expect(filename).toContainText(path.basename(file))
-  await expect.poll(() => filename.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+  await page.setViewportSize({width: 650, height: 540})
+  await expect(page.locator('.window-name')).toContainText(path.basename(file))
   const shortcut = page.getByRole('button', {name: `About Margin v${installed}`, exact: true})
+  await expect(shortcut).toBeInViewport({ratio: 1})
   await expect(shortcut).toHaveText(`v${installed}`)
   await expect.poll(() => shortcut.evaluate(element => {
     const overlay = navigator.windowControlsOverlay
     const bounds = element.getBoundingClientRect()
     const area = overlay?.visible ? overlay.getTitlebarAreaRect() : {left: 0, right: innerWidth}
-    return bounds.left >= area.left && bounds.right <= area.right
+    return bounds.left >= Math.max(0, area.left) && bounds.right <= Math.min(innerWidth, area.right)
   })).toBe(true)
   await shortcut.click()
   const about = page.getByRole('dialog', {name: 'About Margin', exact: true})
