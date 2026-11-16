@@ -289,7 +289,7 @@ async function worker(configPath) {
     await writeResult(profile, latestVersion, status, diagnostic ?? {phase: 'launching'})
     try {
       const child = await launchApplication(executable, relaunchArgs, relaunchEnvironment(process.env, profile))
-      await writeResult(profile, latestVersion, status, {...(diagnostic ?? {phase: 'launched'}), pid: child.pid})
+      if (status === 'installed') await writeResult(profile, latestVersion, status, {phase: 'launched', pid: child.pid})
     } catch (error) {
       await writeResult(profile, latestVersion, 'failed', {phase: 'launch', code: error.code ?? null})
       throw error

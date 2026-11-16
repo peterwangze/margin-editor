@@ -340,7 +340,7 @@ try {
       ? (await execute('dpkg-query', ['-W', '-f=${db:Status-Status} ${Version} ${Architecture}', packageName]).catch(() => null))?.stdout.trim()
       : undefined
     throw new Error(`${form}: application did not restart (${JSON.stringify({
-      status: result?.status, version: result?.version, message: result?.message,
+      status: result?.status, version: result?.version, message: result?.message, diagnostic: result?.diagnostic,
       readyVersion: ready?.version, readyPid: ready?.pid, database,
     })})`, {cause: error})
   }

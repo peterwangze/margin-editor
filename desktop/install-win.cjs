@@ -16,10 +16,55 @@ $pidFile = $env:MARGIN_WINDOWS_INSTALL_PID_FILE
 $env:MARGIN_WINDOWS_INSTALL_COMMAND = $null
 $env:MARGIN_WINDOWS_INSTALL_PID_FILE = $null
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-# libuv terminates its direct Windows children on exit. Start-Process
-# creates a grandchild which breaks away from that job and can survive.
-$helper = Start-Process -FilePath $powershell -ArgumentList @('-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', $payload) -WindowStyle Hidden -PassThru
-[IO.File]::WriteAllText($pidFile + '.tmp', [string]$helper.Id)
+# Start a grandchild without carrying Electron's console or standard handles.
+Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class MarginInstallerProcess {
+    private const int CreateNoWindow = 0x08000000;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct StartupInfo {
+        public int Size;
+        public string Reserved, Desktop, Title;
+        public int X, Y, XSize, YSize, XChars, YChars, Fill, Flags;
+        public short Show, ReservedSize;
+        public IntPtr Reserved2, Input, Output, Error;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessInfo {
+        public IntPtr Process, Thread;
+        public int Pid, Tid;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern bool CreateProcessW(string application, StringBuilder command,
+        IntPtr processAttributes, IntPtr threadAttributes, bool inheritHandles, int flags,
+        IntPtr environment, string directory, ref StartupInfo startup, out ProcessInfo process);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    public static int Launch(string program, string arguments) {
+        var startup = new StartupInfo { Size = Marshal.SizeOf(typeof(StartupInfo)) };
+        var command = new StringBuilder("\"" + program + "\" " + arguments);
+        ProcessInfo process;
+        if (!CreateProcessW(program, command, IntPtr.Zero, IntPtr.Zero, false, CreateNoWindow,
+            IntPtr.Zero, null, ref startup, out process)) {
+            throw new Win32Exception();
+        }
+        CloseHandle(process.Thread);
+        CloseHandle(process.Process);
+        return process.Pid;
+    }
+}
+'@
+$helper = [MarginInstallerProcess]::Launch($powershell, ('-NoLogo -NoProfile -NonInteractive -EncodedCommand ' + $payload))
+[IO.File]::WriteAllText($pidFile + '.tmp', [string]$helper)
 [IO.File]::Move($pidFile + '.tmp', $pidFile)
 `
 
