@@ -206,6 +206,7 @@ export default {
   'Keyboard shortcuts…': 'Raccourcis clavier…',
   'About Margin': 'À propos de Margin',
   'Source and releases': 'Code source et versions',
+  'View latest release': 'Voir la dernière version',
   'Open documents…': 'Documents ouverts…',
   'Previous tab': 'Onglet précédent',
   'Next tab': 'Onglet suivant',

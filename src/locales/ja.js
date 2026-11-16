@@ -206,6 +206,7 @@ export default {
   'Keyboard shortcuts…': 'キーボードショートカット…',
   'About Margin': 'Margin について',
   'Source and releases': 'ソースコードとリリース',
+  'View latest release': '最新リリースを表示',
   'Open documents…': '開いている文書…',
   'Previous tab': '前のタブ',
   'Next tab': '次のタブ',

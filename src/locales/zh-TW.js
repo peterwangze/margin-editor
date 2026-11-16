@@ -204,6 +204,7 @@ export default {
   'Keyboard shortcuts…': '鍵盤快速鍵…',
   'About Margin': '關於 Margin',
   'Source and releases': '原始碼與發行版本',
+  'View latest release': '查看最新發行版本',
   'Open documents…': '已開啟的文件…',
   'Previous tab': '上一個分頁',
   'Next tab': '下一個分頁',

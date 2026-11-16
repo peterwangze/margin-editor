@@ -203,6 +203,7 @@ export default {
   'Keyboard shortcuts…': 'اختصارات لوحة المفاتيح…',
   'About Margin': 'حول Margin',
   'Source and releases': 'الشيفرة المصدرية والإصدارات',
+  'View latest release': 'عرض أحدث إصدار',
   'Open documents…': 'المستندات المفتوحة…',
   'Previous tab': 'علامة التبويب السابقة',
   'Next tab': 'علامة التبويب التالية',

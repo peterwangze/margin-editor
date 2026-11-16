@@ -27,12 +27,13 @@ const toolGroups = [
   [['wrap', WrapText, 'Word Wrap'], ['whitespace', Pilcrow, 'Whitespace'], ['split', Columns2, 'Split']],
 ]
 
-export function Chrome({menus, commands, invoke, platform, doc, toggled}) {
+export function Chrome({menus, commands, invoke, platform, doc, toggled, version}) {
   const {t, direction} = useLocale()
   const [open, setOpen] = useState(null)
   const menuRef = useRef(null)
   const menuNames = Object.keys(menus)
   const title = documentTitle(doc, t)
+  const aboutLabel = t('About Margin')
   useEffect(() => {
     if (!open) return
     const outside = event => { if (!menuRef.current?.contains(event.target)) setOpen(null) }
@@ -71,7 +72,15 @@ export function Chrome({menus, commands, invoke, platform, doc, toggled}) {
   }
   const run = id => { setOpen(null); invoke(id) }
   return <>
-    <header className={`title-bar ${platform === 'darwin' ? 'mac' : ''}`}><div className="brand"><span className="brand-mark" aria-hidden="true">M</span><span className="window-name" title={doc.path ?? title}>{doc.dirty && <span className="title-dirty" aria-label={t('Unsaved')}>● </span>}<bdi>{title}</bdi> <span className="brand-caption">— <bdi>Margin</bdi></span></span></div></header>
+    <header className={`title-bar ${platform === 'darwin' ? 'mac' : ''}`}>
+      <div className="brand">
+        <span className="brand-mark" aria-hidden="true">M</span>
+        <span className="window-name" title={doc.path ?? title}>{doc.dirty && <span className="title-dirty" aria-label={t('Unsaved')}>● </span>}<bdi>{title}</bdi> <span className="brand-caption">— <bdi>Margin</bdi></span></span>
+        <button type="button" className="title-version" title={aboutLabel} aria-label={`${aboutLabel} v${version}`} aria-haspopup="dialog" onClick={() => invoke('about')}>
+          <bdi dir="ltr">v{version}</bdi>
+        </button>
+      </div>
+    </header>
     <nav className="menu-bar" aria-label={t('Application menus')} ref={menuRef} onKeyDown={navigate}>
       {Object.entries(menus).map(([name, ids]) => <div className="menu-group" key={name}>
         <button type="button" aria-expanded={open === name} onClick={() => setOpen(open === name ? null : name)} onMouseEnter={() => { if (open) setOpen(name) }}>{t(name)}</button>

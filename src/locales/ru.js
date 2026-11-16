@@ -204,6 +204,7 @@ export default {
   'Keyboard shortcuts…': 'Сочетания клавиш…',
   'About Margin': 'О программе Margin',
   'Source and releases': 'Исходный код и выпуски',
+  'View latest release': 'Посмотреть последний выпуск',
   'Open documents…': 'Открытые документы…',
   'Previous tab': 'Предыдущая вкладка',
   'Next tab': 'Следующая вкладка',

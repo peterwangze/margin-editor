@@ -204,6 +204,7 @@ export default {
   'Keyboard shortcuts…': 'Atalhos de teclado…',
   'About Margin': 'Sobre o Margin',
   'Source and releases': 'Código-fonte e versões',
+  'View latest release': 'Ver versão mais recente',
   'Open documents…': 'Documentos abertos…',
   'Previous tab': 'Aba anterior',
   'Next tab': 'Próxima aba',

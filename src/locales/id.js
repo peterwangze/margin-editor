@@ -204,6 +204,7 @@ export default {
   'Keyboard shortcuts…': 'Pintasan papan ketik…',
   'About Margin': 'Tentang Margin',
   'Source and releases': 'Kode sumber dan rilis',
+  'View latest release': 'Lihat rilis terbaru',
   'Open documents…': 'Dokumen terbuka…',
   'Previous tab': 'Tab sebelumnya',
   'Next tab': 'Tab berikutnya',

@@ -204,6 +204,7 @@ export default {
   'Keyboard shortcuts…': 'कीबोर्ड शॉर्टकट…',
   'About Margin': 'Margin के बारे में',
   'Source and releases': 'सोर्स कोड और रिलीज़',
+  'View latest release': 'नवीनतम रिलीज़ देखें',
   'Open documents…': 'खुले दस्तावेज़…',
   'Previous tab': 'पिछला टैब',
   'Next tab': 'अगला टैब',

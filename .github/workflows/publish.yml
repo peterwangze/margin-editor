@@ -49,13 +49,14 @@ jobs:
             local platform=$1 arch=$2 form=$3 node_platform=$4
             local dir="evidence/acceptance-$platform-$arch"
             test -s "$dir/package-checks.txt"
-            for screenshot in editor replace inspect language chinese zh-TW ja ko fr de es it pt ru ar hi id find-fr find-de find-es find-it find-pt find-ru find-ar find-hi find-id; do
+            for screenshot in editor version replace inspect language chinese zh-TW ja ko fr de es it pt ru ar hi id find-fr find-de find-es find-it find-pt find-ru find-ar find-hi find-id; do
               test -s "$dir/$form-$screenshot.png"
             done
-            jq -e --arg platform "$node_platform" --arg arch "$arch" --arg form "$form" '
+            jq -e --arg platform "$node_platform" --arg arch "$arch" --arg form "$form" --arg version "$version" '
               .platform == $platform and .arch == $arch and .packageForm == $form and
+              .version == $version and
               (.interfaceLocales | sort) == ["ar","de","en","es","fr","hi","id","it","ja","ko","pt","ru","zh-CN","zh-TW"] and
-              (.passed | index("desktop layout") != null and index("bundled Han font") != null and
+              (.passed | index("desktop layout") != null and index("installed version display") != null and index("bundled Han font") != null and
                 index("bundled Cyrillic fonts") != null and index("bundled Arabic and Devanagari fonts") != null and
                 index("localized replacement and undo") != null and index("rtl interface and document direction") != null and
                 index("inspect and clean") != null and index("disk byte verification") != null and

@@ -203,6 +203,7 @@ export default {
   'Keyboard shortcuts…': 'Scorciatoie da tastiera…',
   'About Margin': 'Informazioni su Margin',
   'Source and releases': 'Codice sorgente e versioni',
+  'View latest release': 'Visualizza l’ultima versione',
   'Open documents…': 'Documenti aperti…',
   'Previous tab': 'Scheda precedente',
   'Next tab': 'Scheda successiva',

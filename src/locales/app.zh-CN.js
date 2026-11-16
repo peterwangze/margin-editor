@@ -49,6 +49,7 @@ export default {
   'Margin is an offline desktop editor for notes, lists, logs, and other plain text.': 'Margin 是一款离线桌面编辑器，适合处理笔记、列表、日志及其他纯文本。',
   'Version {version} · MIT': '版本 {version} · MIT',
   'Source and releases': '源代码和发行版',
+  'View latest release': '查看最新发行版',
   'Command Palette': '命令面板',
   'Find in Open Documents': '在打开的文档中查找',
   'Search open documents': '搜索已打开的文档',

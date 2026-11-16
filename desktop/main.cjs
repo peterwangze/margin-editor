@@ -285,7 +285,10 @@ const actions = {
     return response
   },
   titleStyle(light) { if (process.platform !== 'darwin') window.setTitleBarOverlay({color: light ? '#f0edeb' : '#191721', symbolColor: light ? '#2a2440' : '#f0edf6', height: 36}) },
-  openExternal(url) { if (url === 'https://github.com/peterwangze/margin-editor') return shell.openExternal(url) },
+  openExternal(url) {
+    const repository = 'https://github.com/peterwangze/margin-editor'
+    if (url === repository || url === `${repository}/releases/latest`) return shell.openExternal(url)
+  },
 }
 
 if (!app.requestSingleInstanceLock()) app.quit()

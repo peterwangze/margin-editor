@@ -11,6 +11,7 @@ import {chromium, expect} from '@playwright/test'
 const executable = process.env.MARGIN_EXECUTABLE
 const evidence = process.env.MARGIN_EVIDENCE
 const packageForm = process.env.MARGIN_PACKAGE_FORM
+const {version} = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8'))
 assert.ok(executable && evidence && packageForm, 'Set MARGIN_EXECUTABLE, MARGIN_EVIDENCE, and MARGIN_PACKAGE_FORM')
 const portable = process.platform === 'win32' && packageForm === 'portable'
 await fs.mkdir(evidence, {recursive: true})
@@ -299,6 +300,7 @@ try {
   await page.setViewportSize({width: 650, height: 540})
   await expect(toolbar.getByRole('button', {name: 'Replace', exact: true})).toBeVisible()
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), 0, 'No horizontal window overflow')
+  await verifyAboutVersion()
   await menu.getByRole('button', {name: 'View', exact: true}).focus()
   await page.keyboard.press('Enter')
   await page.keyboard.press('ArrowDown')
@@ -485,11 +487,12 @@ try {
     platform: process.platform,
     arch: process.arch,
     packageForm,
+    version,
     interfaceLocales: ['en', 'zh-CN', ...Object.keys(addedLocales)],
     offline: 'Chromium used a loopback-only proxy and renderer HTTP(S) requests were blocked',
-    passed: ['desktop layout', 'narrow window', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'bundled Cyrillic fonts', 'bundled Arabic and Devanagari fonts', 'CRLF save', 'find and replace', 'localized replacement and undo', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence', 'rtl interface and document direction'],
+    passed: ['desktop layout', 'narrow window', 'installed version display', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'bundled Cyrillic fonts', 'bundled Arabic and Devanagari fonts', 'CRLF save', 'find and replace', 'localized replacement and undo', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence', 'rtl interface and document direction'],
   }, null, 2) + '\n')
-  console.log(`${packageForm}: layout, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup, undo, interface language persistence and RTL passed`)
+  console.log(`${packageForm}: layout, version display, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup, undo, interface language persistence and RTL passed`)
 } catch (error) {
   await page?.screenshot({path: path.join(evidence, `${packageForm}-failed.png`)}).catch(() => {})
   console.error(output)
@@ -524,8 +527,32 @@ async function assertHorizontalOrder(first, second, description) {
   assert.ok(left && right && left.x + left.width <= right.x + 1, description)
 }
 
+async function verifyTitleVersion() {
+  const button = page.locator('.title-bar .title-version')
+  const token = button.locator('bdi')
+  await expect(button).toHaveRole('button')
+  await expect(button).toBeVisible()
+  await expect(button).toHaveText(`v${version}`)
+  await expect(token).toHaveCSS('direction', 'ltr')
+  await expect(token).toBeInViewport({ratio: 1})
+  return button
+}
+
+async function verifyAboutVersion() {
+  const button = await verifyTitleVersion()
+  await expect(button).toHaveAccessibleName(`About Margin v${version}`)
+  await button.click()
+  const about = page.getByRole('dialog', {name: 'About Margin', exact: true})
+  await expect(about.getByText(`Version ${version} · MIT`, {exact: true})).toBeVisible()
+  await expect(about.getByRole('button', {name: 'View latest release', exact: true})).toBeEnabled()
+  await page.screenshot({path: path.join(evidence, `${packageForm}-version.png`), animations: 'disabled'})
+  await page.keyboard.press('Escape')
+  await expect(about).toBeHidden()
+}
+
 async function verifyRtlMenu() {
   await page.setViewportSize({width: 650, height: 540})
+  await verifyTitleVersion()
   const menu = page.getByRole('navigation')
   const headers = menu.locator('.menu-group > button')
   const fileHeader = menu.getByRole('button', {name: 'ملف', exact: true})

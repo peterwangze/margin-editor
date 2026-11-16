@@ -134,6 +134,7 @@ export default {
   'Margin is an offline desktop editor for notes, lists, logs, and other plain text.': 'Margin ist ein Offline-Editor für Notizen, Listen, Protokolle und anderen Klartext.',
   'Version {version} · MIT': 'Version {version} · MIT',
   'Source and releases': 'Quellcode und Releases',
+  'View latest release': 'Neueste Version anzeigen',
   'Command Palette': 'Befehlspalette',
   'Find in Open Documents': 'In geöffneten Dokumenten suchen',
   'Search open documents': 'Geöffnete Dokumente durchsuchen',

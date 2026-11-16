@@ -134,6 +134,7 @@ export default {
   'Margin is an offline desktop editor for notes, lists, logs, and other plain text.': 'Margin은 메모, 목록, 로그 등 일반 텍스트를 편집하는 오프라인 데스크톱 앱입니다.',
   'Version {version} · MIT': '버전 {version} · MIT',
   'Source and releases': '소스 코드 및 릴리스',
+  'View latest release': '최신 릴리스 보기',
   'Command Palette': '명령 팔레트',
   'Find in Open Documents': '열려 있는 문서에서 찾기',
   'Search open documents': '열려 있는 문서 검색',

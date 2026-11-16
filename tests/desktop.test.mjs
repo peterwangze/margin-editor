@@ -78,6 +78,44 @@ test('L01 defaults to the native OS language and handles a profile from 1.0', {t
   }
 })
 
+test('G01 shows the installed version with a long filename and opens the latest release', {timeout: 40000}, async t => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-app-version-'))
+  const profile = path.join(temp, 'profile')
+  await fs.mkdir(profile)
+  const file = path.join(temp, `${'working-notes-'.repeat(12)}.txt`)
+  await fs.writeFile(file, 'version fixture')
+  let app
+  t.after(async () => {
+    await app?.close().catch(() => {})
+    await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  const opened = await launch(profile, [file])
+  app = opened.app
+  const {page} = opened
+  const installed = await app.evaluate(({app, BrowserWindow, shell}) => {
+    BrowserWindow.getAllWindows()[0].setSize(650, 540)
+    shell.openExternal = async url => { globalThis.requestedReleaseUrl = url }
+    return app.getVersion()
+  })
+  const filename = page.locator('.window-name')
+  await expect(filename).toContainText(path.basename(file))
+  await expect.poll(() => filename.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+  const shortcut = page.getByRole('button', {name: `About Margin v${installed}`, exact: true})
+  await expect(shortcut).toHaveText(`v${installed}`)
+  await expect.poll(() => shortcut.evaluate(element => {
+    const overlay = navigator.windowControlsOverlay
+    const bounds = element.getBoundingClientRect()
+    const area = overlay?.visible ? overlay.getTitlebarAreaRect() : {left: 0, right: innerWidth}
+    return bounds.left >= area.left && bounds.right <= area.right
+  })).toBe(true)
+  await shortcut.click()
+  const about = page.getByRole('dialog', {name: 'About Margin', exact: true})
+  await expect(about.getByText(`Version ${installed} · MIT`, {exact: true})).toBeVisible()
+  await about.getByRole('button', {name: 'View latest release', exact: true}).click()
+  await expect.poll(() => app.evaluate(() => globalThis.requestedReleaseUrl))
+    .toBe('https://github.com/peterwangze/margin-editor/releases/latest')
+})
+
 test('I01/I05/I07 open from CLI, edit, write encoded bytes, block external overwrite and recover after close', {timeout: 75000}, async t => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-desktop-'))
   const profile = path.join(temp, 'profile')

@@ -24,6 +24,7 @@ import '@fontsource/ibm-plex-mono/latin-400.css'
 import './style.css'
 
 const api = window.margin
+const latestReleaseUrl = 'https://github.com/peterwangze/margin-editor/releases/latest'
 const languageNames = languages.map(item => item.name).sort()
 const noMatches = []
 const cursorStart = {line: 1, col: 1, count: 0, lines: 1, overwrite: false}
@@ -292,7 +293,7 @@ function App() {
   return <div className="workbench" style={{'--editor-size': `${m.settings.fontSize}px`}} onDragOver={event => {
     if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDrag(true) }
   }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDrag(false) }} onDrop={onDropFiles}>
-    <Chrome menus={menus} commands={commands} invoke={invoke} platform={api?.platform} doc={m.doc} toggled={{wrap: m.settings.wrap, whitespace: m.settings.whitespace, split: Boolean(m.split)}} />
+    <Chrome menus={menus} commands={commands} invoke={invoke} platform={api?.platform} doc={m.doc} toggled={{wrap: m.settings.wrap, whitespace: m.settings.whitespace, split: Boolean(m.split)}} version={version} />
     <main className="workspace">
       {panel === 'files' && <Explorer docs={m.docs} active={m.doc.id} workspace={m.workspace} entries={m.entries} api={api} openPath={path => safe(() => m.openPath(path))} focusDoc={m.focus} chooseFolder={() => invoke('openFolder')} notify={notify} hide={() => setPanel('')} />}
       {panel === 'outline' && <Outline doc={deferredDoc} symbols={symbolsFor(deferredDoc, m.settings.languages.find(item => item.name === deferredDoc.language)?.outline)} navigate={line => goTo(m.selectedView(), line)} hide={() => setPanel('')} />}
@@ -341,7 +342,15 @@ function App() {
     {dialog?.kind === 'palette' && <Palette key={dialog.label} mode={dialog.label} items={dialog.items} close={closeDialog} run={item => safe(() => dialog.run(item))} />}
     {dialog?.kind === 'fields' && <Fields key={dialog.label} {...dialog} close={closeDialog} />}
     {dialog?.kind === 'settings' && <Settings settings={m.settings} change={changeSettings} close={closeDialog} keybindings={() => invoke('keybindings')} customLanguage={() => invoke('customLanguage')} tools={() => invoke('tools')} />}
-    {dialog?.kind === 'about' && <Dialog label="About Margin" close={closeDialog}><div className="form"><p>{t('Margin is an offline desktop editor for notes, lists, logs, and other plain text.')}</p><p>{t('Version {version} · MIT', {version})}</p><button className="outline-button" onClick={() => invoke('repository')}>{t('Source and releases')}</button></div></Dialog>}
+    {dialog?.kind === 'about' && <Dialog label="About Margin" close={closeDialog}>
+      <div className="form">
+        <p>{t('Margin is an offline desktop editor for notes, lists, logs, and other plain text.')}</p>
+        <p>{t('Version {version} · MIT', {version})}</p>
+        <button className="outline-button" onClick={() => safe(() => api
+          ? api.openExternal(latestReleaseUrl)
+          : window.open(latestReleaseUrl, '_blank', 'noopener,noreferrer'))}>{t('View latest release')}</button>
+      </div>
+    </Dialog>}
     {dialog?.kind === 'inspect-text' && <TextInspector snapshot={dialog.snapshot} close={closeDialog} />}
     {dialog?.kind === 'open-search' && <OpenSearch docs={m.docs} focus={m.focus} close={closeDialog} />}
     {dialog?.kind === 'large-search' && <LargeSearch api={api} doc={m.doc} close={closeDialog} initialQuery={find.query} jump={match => safe(async () => { await m.readPage(m.doc, match.page, match); m.selectedView()?.focus() })} />}
