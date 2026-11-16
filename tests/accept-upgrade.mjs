@@ -260,6 +260,7 @@ try {
     executablePath: executable, args, timeout: 50000,
     env: {...process.env, ...env, MARGIN_PROFILE: profile, MARGIN_TEST_LOCALE: 'en-US', MARGIN_TEST_RESTART_PORT: String(restartPort)},
   })
+  app.context().setDefaultTimeout(15000)
   const mainErrors = []
   app.on('console', message => {
     if (message.type() === 'error') mainErrors.push(message.text())
@@ -268,7 +269,7 @@ try {
   oldPid = initial.pid
   assert.equal(initial.version, previous)
   assert.equal(initial.restartPort, String(restartPort))
-  console.log(`${form}: old debugger requested ${port}, Electron reports ${initial.debugPort || 'unset'}, restart debugger uses ${restartPort}`)
+  console.log(`${form}: opened ${previous} (PID ${oldPid}); old debugger requested ${port}, Electron reports ${initial.debugPort || 'unset'}, restart debugger uses ${restartPort}`)
   const page = await app.firstWindow({timeout: 20000})
   const editor = page.getByRole('textbox', {name: 'Document editor', exact: true})
   await expect(page.getByRole('button', {name: `About Margin v${previous}`, exact: true})).toBeVisible()
@@ -293,6 +294,7 @@ try {
     const normal = await json(path.join(profile, 'session.json'))
     return {count: normal?.docs?.length, recover: normal?.settings?.recover}
   }).toEqual({count: 0, recover: false})
+  console.log(`${form}: opened disk files, edited a draft, and saved settings`)
   await page.getByRole('button', {name: 'Help', exact: true}).click()
   await page.getByRole('button', {name: 'Check for updates', exact: true}).click()
   const update = page.getByRole('dialog', {name: 'Check for updates', exact: true})
@@ -303,6 +305,7 @@ try {
   assert.ok(processExists(oldPid))
   assert.equal(await digest(oldTarget), originalSha)
   await expect(editor).toHaveText(draft)
+  console.log(`${form}: invalid download left the original running`)
 
   await app.evaluate(() => { globalThis.marginFixtureMode = 'valid' })
   await update.getByRole('button', {name: 'Try again', exact: true}).click()
@@ -311,12 +314,13 @@ try {
   const verified = path.join(downloads, assetName)
   assert.equal(await digest(verified), sha)
   await fs.truncate(verified, 1)
-  await install.click()
+  await install.press('Enter', {timeout: 15000})
   await expect(update.getByRole('alert')).toHaveText('Could not start the installation. Your documents are still open.')
   assert.ok(processExists(oldPid))
   assert.equal(await digest(oldTarget), originalSha)
   await expect(editor).toHaveText(draft)
   assert.equal(await json(resultFile), null)
+  console.log(`${form}: altered installer left the original running`)
   await fs.unlink(verified)
   await page.keyboard.press('Escape')
   await page.getByRole('button', {name: 'Help', exact: true}).click()
@@ -325,16 +329,26 @@ try {
   await expect(install).toBeEnabled({timeout: 60000})
   assert.equal(await digest(verified), sha)
   console.log(`${form}: ${previous} downloaded and verified ${assetName}; starting native install`)
-  await install.click({noWaitAfter: true})
+  const priorErrors = mainErrors.length
+  await Promise.race([
+    install.press('Enter', {timeout: 15000}),
+    delay(16000, undefined, {ref: false}).then(() => { throw new Error(`${form}: timed out activating Install and restart`) }),
+  ])
+  console.log(`${form}: activated Install and restart`)
 
   const address = `http://127.0.0.1:${restartPort}`
   const deadline = Date.now() + 95000
   while (processExists(oldPid)) {
-    const message = await update.getByRole('alert').textContent({timeout: 350}).catch(() => null)
-    if (message) throw new Error(`${form}: ${message}\n${mainErrors.slice(-2).join('\n')}`)
+    const error = mainErrors.slice(priorErrors).find(message => message.includes('margin:installUpdate'))
+    if (error) throw new Error(`${form}: install request failed\n${error}`)
+    const result = await json(resultFile)
+    if (result?.status === 'failed' || result?.status === 'cancelled') {
+      throw new Error(`${form}: installation ${result.status} before the original application exited (${JSON.stringify(result.diagnostic)})`)
+    }
     assert.ok(Date.now() < deadline, `${form}: the original application did not exit after installation was requested`)
     await delay(250)
   }
+  console.log(`${form}: original application exited`)
   try {
     await expect.poll(async () => {
       const ready = await json(readyFile)
@@ -354,6 +368,7 @@ try {
     })})`, {cause: error})
   }
   restartedBrowser = await chromium.connectOverCDP(address, {timeout: 15000})
+  console.log(`${form}: connected to the relaunched application`)
   const browserSession = await restartedBrowser.newBrowserCDPSession()
   const {processInfo} = await browserSession.send('SystemInfo.getProcessInfo')
   const actualPid = processInfo.find(item => item.type === 'browser')?.id
@@ -361,6 +376,7 @@ try {
   if (newPid) assert.equal(actualPid, newPid)
   newPid = actualPid
   const context = restartedBrowser.contexts()[0]
+  context.setDefaultTimeout(15000)
   const next = context.pages()[0] ?? await context.waitForEvent('page', {timeout: 20000})
   const restoredEditor = next.getByRole('textbox', {name: 'Document editor', exact: true})
   await expect(next.getByRole('button', {name: `About Margin v${version}`, exact: true})).toBeVisible({timeout: 20000})
@@ -377,6 +393,7 @@ try {
   await expect(restoredSettings.getByLabel('Interface language')).toHaveValue('en')
   await expect(restoredSettings.getByRole('checkbox', {name: 'Restore session on launch', exact: true})).not.toBeChecked()
   await next.keyboard.press('Escape')
+  console.log(`${form}: verified restored documents and settings in PID ${newPid}`)
   await expect.poll(async () => {
     const normal = await json(path.join(profile, 'session.json'))
     const oneTime = await json(path.join(profile, 'update-session.json'))

@@ -134,8 +134,8 @@ async function shutdown() {
 }
 
 async function openLanguageSettings(chinese) {
-  await page.getByRole('button', {name: chinese ? '设置' : 'Settings', exact: true}).click()
-  await page.getByRole('button', {name: chinese ? /^首选项…/ : /^Preferences…/}).click()
+  await page.getByRole('button', {name: chinese ? '设置' : 'Settings', exact: true}).press('Enter')
+  await page.getByRole('button', {name: chinese ? /^首选项…/ : /^Preferences…/}).press('Enter')
   const settings = page.getByRole('dialog', {name: chinese ? '设置' : 'Settings', exact: true})
   return settings.getByRole('combobox', {name: chinese ? '界面语言' : 'Interface language', exact: true})
 }
