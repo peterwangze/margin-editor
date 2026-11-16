@@ -60,6 +60,19 @@ F01–F12 是早期迁移对照，保留子项和历史结果。当前产品承�
 
 安装包的 CI 通过表示已生成工件，带 Smoke 步骤的架构还验证了包内应用的真实编辑与磁盘操作。完整安装程序、系统文件关联和卸载用例需要独立证据。
 
+## v1.5.0 执行记录
+
+发行提交 `53cc3e5e0f5462e894ab60f4189a9d678fd07989`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43780350537) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43781760766) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.5.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.5.0/ACCEPTANCE.zip)
+
+| 范围 | 状态 | 已观察的结果 |
+| --- | --- | --- |
+| G01–G04 | 通过 | Windows、macOS、Linux 的 x64 和 ARM64 各通过两种离线包的元数据、运行时和实际操作检查，核对了保存字节。六组各通过 13 项核心和 11 项桌面用例，Linux x64 另通过 11 项浏览器用例。 |
+| G06 系统语言 | 通过 | 六组原生环境比对应用首次启动语言与实际系统偏好。各包覆盖原有语言、`ar-EG`、`hi-IN`、`id-ID` 与英文回退，验证 14 种语言的手动切换及重启记忆。 |
+| G06 界面与 RTL | 通过 | 三种新语言在 650、760、901、1024 像素宽度通过菜单和查找栏检查。阿拉伯语验证左右键按视觉顺序移动、弹出菜单和设置镜像、混排文本查找替换及撤销。切换界面方向时保留焦点、草稿和文档方向。阿拉伯文和天城文字体离线加载成功，macOS 两种架构通过本地化原生菜单检查。 |
+| G05 | 通过 | GitHub Latest 为正式版，12 个离线包与两个验收文件均可公开下载。清单的 13 条 SHA-256 与资产摘要一致，档案包含 12 份包报告和三种新语言的 72 张设置与查找截图。 |
+
+首次 Windows x64 便携版验收遇到重复自解压耗时超限。每次启动改用隔离的临时目录并等待实际启动，修正后完整重跑六组验收。标准文件对话框使用操作系统语言。Windows 包为未签名构建，macOS 包采用临时签名。Linux AppImage 以无 FUSE 的解包方式验收。
+
 ## v1.4.0 执行记录
 
 发行提交 `5b4246d2b1e9f73b46f6af946bfda045a1f4b9ed`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43724167835) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43725284776) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.4.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.4.0/ACCEPTANCE.zip)
