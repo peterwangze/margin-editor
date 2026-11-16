@@ -63,6 +63,17 @@ F01–F12 是早期迁移对照，保留子项和历史结果。当前产品承�
 
 安装包的 CI 通过表示已生成工件，带 Smoke 步骤的架构还验证了包内应用的真实编辑与磁盘操作。完整安装程序、系统文件关联和卸载用例需要独立证据。
 
+## v1.8.0 执行记录
+
+发行提交 `794ff4797e84e0c40ae06fb88abec3156ab5e0e2`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43834102183) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43838236730) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.8.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.8.0/ACCEPTANCE.zip)
+
+| 范围 | 状态 | 已观察的结果 |
+| --- | --- | --- |
+| G01–G04、G06 | 通过 | Windows、macOS 和 Linux 的 x64 与 ARM64 六组原生环境完成 12 个离线包的静态和实际交互检查。Linux ARM64 有一次截图超时，同一候选提交复验通过。 |
+| G07–G08 | 通过 | 真实 GitHub 最新发行信息可正确匹配十种平台、架构和更新包组合。用 1.6.99 测试构建升级到十种正式包，均恢复文件、草稿和设置。另在本机用正式发布的 1.7.0 Windows x64 便携版升级到隔离构建的 1.8.0，通过校验、安装和恢复。 |
+| G09 | 通过 | 每个离线包均验证普通句子保持纯文本、Verilog 和 Python 随内容自动高亮，以及手动选择优先和恢复自动识别。两种语法各留存深浅主题截图，共 48 张。浏览器用例另验证了 JavaScript、两个主题的共用语法颜色在测试背景上的对比度，以及自定义语法样式导入。 |
+| G05 | 通过 | GitHub Latest 为正式版。12 个离线包、验收档案和校验清单可公开下载，13 条 SHA-256 对应发布资产。 |
+
 ## v1.7.0 执行记录
 
 发行提交 `15a73c72e6a52f99c14220574e8823103641bc68`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43819671900) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43822498571) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.7.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.7.0/ACCEPTANCE.zip)
