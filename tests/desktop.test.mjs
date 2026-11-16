@@ -9,7 +9,7 @@ import path from 'node:path'
 import {_electron as electron, expect} from '@playwright/test'
 import {encode} from '../desktop/codec.mjs'
 import {EDIT_LIMIT, PAGE_SIZE} from '../desktop/files.mjs'
-import {interfaceLocale} from '../shared/locale.mjs'
+import {interfaceDirection, interfaceLocale} from '../shared/locale.mjs'
 
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control'
 const executablePath = process.env.MARGIN_EXECUTABLE || undefined
@@ -43,10 +43,12 @@ test('L01 defaults to the native OS language and handles a profile from 1.0', {t
   assert.deepEqual(systemLanguages, native)
   const expected = interfaceLocale('system', native)
   await expect(page.locator('html')).toHaveAttribute('lang', expected)
+  await expect(page.locator('html')).toHaveAttribute('dir', interfaceDirection(expected))
   const editorLabels = {
     en: 'Document editor', 'zh-CN': '文档编辑器', 'zh-TW': '文件編輯器', ja: '文書エディター', ko: '문서 편집기',
     fr: 'Éditeur de documents', de: 'Dokumenteditor', es: 'Editor de documentos',
     it: 'Editor di documenti', pt: 'Editor de documentos', ru: 'Редактор документов',
+    ar: 'محرر المستندات', hi: 'दस्तावेज़ संपादक', id: 'Editor dokumen',
   }
   await expect(page.getByRole('textbox', {name: editorLabels[expected]})).toBeVisible()
   if (process.platform === 'darwin') {
@@ -61,6 +63,9 @@ test('L01 defaults to the native OS language and handles a profile from 1.0', {t
       ['it', 'Modifica', 'Annulla', 'Esci da Margin'],
       ['pt', 'Editar', 'Desfazer', 'Sair do Margin'],
       ['ru', 'Правка', 'Отменить', 'Завершить работу Margin'],
+      ['ar', 'تحرير', 'تراجع', 'إنهاء Margin'],
+      ['hi', 'संपादन', 'पूर्ववत करें', 'Margin बंद करें'],
+      ['id', 'Edit', 'Urungkan', 'Keluar dari Margin'],
     ]) {
       await page.evaluate(value => window.margin.setInterfaceLanguage(value), locale)
       const nativeMenu = await app.evaluate(({Menu}) => Menu.getApplicationMenu().items.map(item => ({

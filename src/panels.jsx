@@ -34,11 +34,11 @@ export function Palette({mode, items, close, run}) {
   useEffect(() => { ref.current?.scrollIntoView({block: 'nearest'}) }, [index])
   const select = item => { if (item) { close(); run(item) } }
   const label = commandPalette ? t('Filter command palette') : t('Filter {list}', {list: t(mode).toLocaleLowerCase(locale)})
-  return <Dialog label={mode} close={close} className="palette-dialog"><div className="palette-input"><Search size={18} /><input data-focus aria-label={label} placeholder={commandPalette ? t('Type a command…') : t('Type a filename…')} value={input} onChange={event => { setInput(event.target.value); setActive(0) }} onKeyDown={event => {
+  return <Dialog label={mode} close={close} className="palette-dialog"><div className="palette-input"><Search size={18} /><input data-focus dir="auto" aria-label={label} placeholder={commandPalette ? t('Type a command…') : t('Type a filename…')} value={input} onChange={event => { setInput(event.target.value); setActive(0) }} onKeyDown={event => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setActive(Math.max(0, Math.min(filtered.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))) }
     if (event.key === 'Enter') { event.preventDefault(); select(filtered[index]) }
   }} /></div>
-    <div className="palette-results">{filtered.map((item, i) => <button key={item.id} ref={i === index ? ref : null} className={i === index ? 'active' : ''} onMouseMove={() => setActive(i)} onClick={() => select(item)}><span><strong>{item.label}</strong>{item.detail && <small>{item.detail}</small>}</span><kbd>{shortcutLabel(item.key)}</kbd></button>)}{!filtered.length && <p className="panel-empty">{t('No results')}</p>}</div>
+    <div className="palette-results">{filtered.map((item, i) => <button key={item.id} ref={i === index ? ref : null} className={i === index ? 'active' : ''} onMouseMove={() => setActive(i)} onClick={() => select(item)}><span><strong>{item.label}</strong>{item.detail && <small>{item.detail}</small>}</span><kbd dir="ltr">{shortcutLabel(item.key)}</kbd></button>)}{!filtered.length && <p className="panel-empty">{t('No results')}</p>}</div>
   </Dialog>
 }
 
@@ -77,7 +77,7 @@ export function Settings({settings, change, close, keybindings, customLanguage, 
     <div className="form settings-form">
       <label>{t('Interface language')}<select data-focus value={preference} onChange={event => setPreference(event.target.value)}>
         <option value="system">{t('Follow system')}</option>
-        {interfaceLanguages.map(({value, label}) => <option key={value} value={value} lang={value}>{label}</option>)}
+        {interfaceLanguages.map(({value, label, direction}) => <option key={value} value={value} lang={value} dir={direction ?? 'ltr'}>{label}</option>)}
       </select></label>
       {languageError && <p role="alert" className="inline-error">{languageError}</p>}
       <label>{t('Appearance')}<select value={settings.theme} onChange={event => change({theme: event.target.value})}><option value="dark">{t('Ink')}</option><option value="light">{t('Paper')}</option><option value="system">{t('System')}</option></select></label>
@@ -125,7 +125,7 @@ export function LargeSearch({api, doc, close, jump, initialQuery}) {
   }
   return <Dialog label="Find Across All Pages" close={close}>
     <form className="form" onSubmit={submit}>
-      <label>{t('Find')}<input data-focus value={query.needle} disabled={pending} onChange={event => change({needle: event.target.value})} /></label>
+      <label>{t('Find')}<input data-focus dir="auto" value={query.needle} disabled={pending} onChange={event => change({needle: event.target.value})} /></label>
       <div className="form-columns"><label>{t('Mode')}<select value={query.mode} disabled={pending} onChange={event => change({mode: event.target.value})}><option value="literal">{t('Normal')}</option><option value="extended">{t('Extended')}</option></select></label><div>
         <label className="checkbox">{t('Match case')}<input type="checkbox" checked={query.caseSensitive} disabled={pending} onChange={event => change({caseSensitive: event.target.checked})} /></label>
         <label className="checkbox">{t('Whole word')}<input type="checkbox" checked={query.whole} disabled={pending} onChange={event => change({whole: event.target.checked})} /></label>
@@ -182,8 +182,8 @@ export function WorkspaceSearch({workspace, chooseFolder, api, openPath, docs, n
   }
   return <aside className="sidebar workspace-search" aria-label={t('Workspace search')}><div className="panel-heading"><strong>{t('Find in Files')}</strong><IconButton icon={PanelLeft} label={t('Hide workspace search')} onClick={hide} /></div>
     <div className="search-fields"><button className="outline-button root-button" title={workspace ?? ''} onClick={chooseFolder}>{workspace ? basename(workspace) : t('Choose Folder…')}</button>
-      <form className="form" onSubmit={event => { event.preventDefault(); start(false) }}><label>{t('Find in files')}<input value={query.needle} onChange={event => change('needle', event.target.value)} disabled={running === 'replace'} /></label><label>{t('Replace in files')}<input value={query.replacement} onChange={event => change('replacement', event.target.value)} disabled={running === 'replace'} /></label>
-        <div className="form-columns"><label>{t('Files')}<input value={filter} placeholder="*.txt, *.md" onChange={event => { reset(); setFilter(event.target.value) }} disabled={running === 'replace'} /></label><label>{t('Depth')}<input type="number" min="0" max="64" value={depth} onChange={event => { reset(); setDepth(event.target.value) }} disabled={running === 'replace'} /></label></div>
+      <form className="form" onSubmit={event => { event.preventDefault(); start(false) }}><label>{t('Find in files')}<input dir="auto" value={query.needle} onChange={event => change('needle', event.target.value)} disabled={running === 'replace'} /></label><label>{t('Replace in files')}<input dir="auto" value={query.replacement} onChange={event => change('replacement', event.target.value)} disabled={running === 'replace'} /></label>
+        <div className="form-columns"><label>{t('Files')}<input dir="ltr" value={filter} placeholder="*.txt, *.md" onChange={event => { reset(); setFilter(event.target.value) }} disabled={running === 'replace'} /></label><label>{t('Depth')}<input type="number" min="0" max="64" value={depth} onChange={event => { reset(); setDepth(event.target.value) }} disabled={running === 'replace'} /></label></div>
         <div className="form-columns"><label>{t('Mode')}<select value={query.mode} onChange={event => change('mode', event.target.value)} disabled={running === 'replace'}><option value="literal">{t('Normal')}</option><option value="extended">{t('Extended')}</option><option value="regex">{t('Regex')}</option></select></label><div className="settings-checks"><label className="checkbox"><span>{t('Match case')}</span><input type="checkbox" checked={query.caseSensitive} onChange={event => change('caseSensitive', event.target.checked)} disabled={running === 'replace'} /></label><label className="checkbox"><span>{t('Whole word')}</span><input type="checkbox" checked={query.whole} onChange={event => change('whole', event.target.checked)} disabled={running === 'replace'} /></label></div></div>
         <div className="search-actions"><button type="submit" className="primary-button" disabled={!workspace || !query.needle || Boolean(running)}>{t('Find')}</button><button type="button" className="outline-button" disabled={!workspace || !query.needle || Boolean(running)} onClick={() => start(true)}>{t('Preview Replace')}</button>{running === 'search' && <button className="text-button" type="button" onClick={reset}>{t('Cancel')}</button>}</div>
       </form>

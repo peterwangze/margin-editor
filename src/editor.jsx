@@ -129,10 +129,12 @@ function customMode(mode) {
 
 function editorOptions(settings, doc) {
   const large = (doc.size ?? doc.text.length) > 2 * 1024 * 1024
+  const dir = (doc.rtl ?? settings.rtl) ? 'rtl' : 'ltr'
   return [settings.numbers ? lineNumbers() : [], highlightActiveLineGutter(), settings.whitespace && !large ? highlightWhitespace() : [],
     settings.wrap && !large ? EditorView.lineWrapping : [], EditorState.tabSize.of(settings.tabSize), indentUnit.of(settings.spaces ? ' '.repeat(settings.tabSize) : '\t'),
     EditorState.readOnly.of(doc.readOnly), EditorView.editable.of(!doc.readOnly),
-    EditorView.contentAttributes.of({dir: (doc.rtl ?? settings.rtl) ? 'rtl' : 'ltr', spellcheck: 'false'}),
+    EditorView.editorAttributes.of({dir}),
+    EditorView.contentAttributes.of({dir, spellcheck: 'false'}),
     settings.autocomplete && !large ? autocompletion() : [], large ? [] : [foldGutter(), highlightSelectionMatches(), highlightSpecialChars(), bracketMatching(), closeBrackets(), indentOnInput()]]
 }
 

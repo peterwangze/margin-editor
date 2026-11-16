@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {interfaceLanguages, interfaceLocale, languagePreference} from '../shared/locale.mjs'
+import {interfaceDirection, interfaceLanguages, interfaceLocale, languagePreference} from '../shared/locale.mjs'
 import app from '../src/locales/app.zh-CN.js'
 import chrome from '../src/locales/chrome.zh-CN.js'
 import commands from '../src/locales/commands.zh-CN.js'
@@ -14,6 +14,9 @@ import spanish from '../src/locales/es.js'
 import italian from '../src/locales/it.js'
 import portuguese from '../src/locales/pt.js'
 import russian from '../src/locales/ru.js'
+import arabic from '../src/locales/ar.js'
+import hindi from '../src/locales/hi.js'
+import indonesian from '../src/locales/id.js'
 
 test('interface language honors explicit choices and ordered OS preferences', () => {
   assert.equal(interfaceLocale('en', ['zh-Hans-CN']), 'en')
@@ -36,8 +39,16 @@ test('interface language honors explicit choices and ordered OS preferences', ()
   assert.equal(interfaceLocale('system', ['pt-BR', 'pt-PT', 'en-US']), 'pt')
   assert.equal(interfaceLocale('system', ['pt_PT.UTF-8']), 'pt')
   assert.equal(interfaceLocale('system', ['ru-RU', 'en-US']), 'ru')
+  assert.equal(interfaceLocale('system', ['ar-EG', 'en-US']), 'ar')
+  assert.equal(interfaceLocale('system', ['ar-MA', 'fr-FR']), 'ar')
+  assert.equal(interfaceLocale('system', ['hi_IN.UTF-8', 'en-IN']), 'hi')
+  assert.equal(interfaceLocale('system', ['nl-NL', 'id-ID', 'en-US']), 'id')
+  assert.equal(interfaceLocale('system', ['in-ID']), 'id')
   assert.equal(interfaceLocale('system', [null, '', 'nl-NL']), 'en')
-  for (const {value} of interfaceLanguages) assert.equal(interfaceLocale(value, ['en-US', 'zh-CN']), value)
+  for (const {value} of interfaceLanguages) {
+    assert.equal(interfaceLocale(value, ['en-US', 'zh-CN']), value)
+    assert.equal(interfaceDirection(value), value === 'ar' ? 'rtl' : 'ltr')
+  }
   assert.equal(languagePreference('unknown'), 'system')
 })
 
@@ -47,7 +58,7 @@ test('all translated locales cover the same messages and preserve named placehol
   const keys = Object.keys(simplified).sort()
   for (const [locale, dictionary] of Object.entries({
     'zh-CN': simplified, 'zh-TW': traditional, ja: japanese, ko: korean, fr: french, de: german, es: spanish,
-    it: italian, pt: portuguese, ru: russian,
+    it: italian, pt: portuguese, ru: russian, ar: arabic, hi: hindi, id: indonesian,
   })) {
     assert.deepEqual(Object.keys(dictionary).sort(), keys, `${locale} message coverage`)
     for (const [source, translation] of Object.entries(dictionary)) {

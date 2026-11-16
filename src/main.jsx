@@ -37,7 +37,7 @@ function download(name, content) {
 }
 
 function App() {
-  const {t, locale, formatNumber} = useLocale()
+  const {t, locale, direction, formatNumber} = useLocale()
   const [notice, setNotice] = useState(null)
   const noticeTimer = useRef(null)
   const notify = message => {
@@ -281,7 +281,7 @@ function App() {
         {active && <button className="outline-button" disabled={commands.wholeFile.disabled} onClick={() => invoke('wholeFile')}>{t('Find Across Pages…')}</button>}
       </div>}
       <div className="editor-body"><EditorSurface doc={doc} settings={m.settings} slot={slot} attach={m.attach} onEdit={onEdit} onCursor={onCursor} activate={m.setSlot} onScroll={onScroll} matches={active && find.show ? find.result.matches : noMatches} matchIndex={active ? find.index : -1} />
-        {minimap && active && <DocumentMap text={doc.text} navigate={line => goTo(m.selectedView(), line)} />}</div>
+        {minimap && active && <DocumentMap text={doc.text} direction={(doc.rtl ?? m.settings.rtl) ? 'rtl' : 'ltr'} navigate={line => goTo(m.selectedView(), line)} />}</div>
     </section>
   }
 
@@ -307,12 +307,12 @@ function App() {
         await m.openPath(path)
       })} />}
       {panel === 'search' && <WorkspaceSearch api={api} workspace={m.workspace} chooseFolder={() => invoke('openFolder')} openPath={(...args) => safe(() => m.openPath(...args))} docs={m.docs} notify={notify} reload={reloadFiles} hide={() => setPanel('')} />}
-      <div className="central"><div className="editing-area"><div className={`panes ${m.split}`}>{viewPane('main', m.main)}{m.split && viewPane('secondary', m.secondary)}</div>{companion && <Companion mode={companion} doc={m.doc} close={() => setCompanion('')} />}</div>{output && <Output data={output} close={() => setOutput(null)} />}
+      <div className="central"><div className="editing-area"><div className={`panes ${m.split}`}>{viewPane('main', m.main)}{m.split && viewPane('secondary', m.secondary)}</div>{companion && <Companion mode={companion} doc={m.doc} direction={(m.doc.rtl ?? m.settings.rtl) ? 'rtl' : 'ltr'} close={() => setCompanion('')} />}</div>{output && <Output data={output} close={() => setOutput(null)} />}
         {find.show && <FindBar query={find.query} change={find.change} replace={find.show === 'replace'} result={find.result} index={find.index} next={find.next} apply={find.apply} close={find.close} mark={() => invoke('markMatches')} options={() => invoke('searchOptions')} input={find.input} />}</div>
     </main>
     <footer className="status-bar" aria-label={t('Document status')}><div className="status-file" title={m.doc.path ?? documentTitle(m.doc, t)}>
       <FileGlyph name={m.doc.name} size={14} />
-      <span>{documentTitle(m.doc, t)}</span>
+      <span dir="auto">{documentTitle(m.doc, t)}</span>
       <span className={m.doc.dirty ? 'unsaved-text' : ''}>{t(m.doc.dirty ? 'Unsaved' : m.doc.readOnly ? 'Read-only' : m.doc.sample ? 'Demo' : m.doc.path ? 'Saved' : 'New')}</span>
       {recording && <span className="unsaved-text">{t('● Recording')}</span>}
       {tail === m.doc.id && <span>{t('Following')}</span>}
@@ -324,15 +324,18 @@ function App() {
       <button onClick={() => invoke('convert')} title={t('Convert encoding')}>{m.doc.encoding}</button>
       <button onClick={() => invoke('language')} title={t('Select language')}>{mode?.name ?? t('Plain Text')}</button>
       <button onClick={() => invoke('settings')} title={t('Indentation')}>{t(m.settings.spaces ? 'Spaces: {size}' : 'Tabs: {size}', {size: m.settings.tabSize})}</button>
-      <button onClick={() => invoke('zoomReset')} title={t('Reset editor zoom')}>{Math.round(m.settings.fontSize / 15 * 100)}%</button>
+      <button onClick={() => invoke('zoomReset')} title={t('Reset editor zoom')}><bdi>{Math.round(m.settings.fontSize / 15 * 100)}%</bdi></button>
       <button onClick={() => invoke('overwrite')} title={t('Toggle overwrite')}>{t(status.overwrite ? 'OVR' : 'INS')}</button>
     </div></footer>
     <input type="file" multiple ref={m.fileInput} hidden onChange={event => { const files = [...event.target.files]; event.target.value = ''; safe(() => m.openBrowser(files)) }} />
     <input type="file" ref={importInput} hidden onChange={event => { const file = event.target.files[0]; event.target.value = ''; safe(() => importFile(file)) }} />
-    <pre id="print-sheet" />
+    <pre id="print-sheet" dir={(m.doc.rtl ?? m.settings.rtl) ? 'rtl' : 'ltr'} />
     {notice?.locale === locale && <div className="toast" role="status">{notice.text}<IconButton icon={X} label={t('Dismiss notification')} onClick={() => setNotice(null)} /></div>}
     {drag && <div className="drop-overlay">{t('Drop to open files or a folder')}</div>}
-    {context && <div className="context-overlay" onPointerDown={() => setContext(null)}><div className="menu-items context-menu" style={{left: Math.min(context.x, window.innerWidth - 210), top: Math.min(context.y, window.innerHeight - 180)}} onPointerDown={event => event.stopPropagation()}>
+    {context && <div className="context-overlay" onPointerDown={() => setContext(null)}><div className="menu-items context-menu" style={{
+      [direction === 'rtl' ? 'right' : 'left']: Math.min(direction === 'rtl' ? window.innerWidth - context.x : context.x, window.innerWidth - 210),
+      top: Math.min(context.y, window.innerHeight - 180),
+    }} onPointerDown={event => event.stopPropagation()}>
       <button onClick={() => {m.amend(context.doc.id, {pinned: !context.doc.pinned}); setContext(null)}}>{t(context.doc.pinned ? 'Unpin tab' : 'Pin tab')}</button><button onClick={() => {safe(() => m.save(context.doc.id)); setContext(null)}}>{t('Save')}</button><button onClick={() => {safe(() => m.close([context.doc.id])); setContext(null)}}>{t('Close')}</button><button onClick={() => {safe(() => m.close(m.docs.filter(item => item.id !== context.doc.id && !item.pinned).map(item => item.id))); setContext(null)}}>{t('Close other tabs')}</button>
     </div></div>}
     {dialog?.kind === 'palette' && <Palette key={dialog.label} mode={dialog.label} items={dialog.items} close={closeDialog} run={item => safe(() => dialog.run(item))} />}

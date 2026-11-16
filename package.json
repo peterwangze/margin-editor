@@ -1,6 +1,6 @@
 {
   "name": "margin-editor",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "A local-first desktop text editor for Windows, macOS and Linux",
   "author": "peterwangze",
   "license": "MIT",
@@ -82,6 +82,8 @@
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/instrument-sans": "^5.3.0",
     "@fontsource/noto-sans": "5.3.0",
+    "@fontsource/noto-sans-arabic": "5.3.0",
+    "@fontsource/noto-sans-devanagari": "5.3.0",
     "@fontsource/noto-sans-jp": "5.3.1",
     "@fontsource/noto-sans-kr": "5.3.1",
     "@fontsource/noto-sans-sc": "5.3.1",

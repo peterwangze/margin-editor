@@ -1,5 +1,5 @@
-import {createContext, useContext, useEffect, useMemo, useRef, useState} from 'react'
-import {interfaceLocale, languagePreference} from '../shared/locale.mjs'
+import {createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
+import {interfaceDirection, interfaceLocale, languagePreference} from '../shared/locale.mjs'
 import appChinese from './locales/app.zh-CN.js'
 import chromeChinese from './locales/chrome.zh-CN.js'
 import commandsChinese from './locales/commands.zh-CN.js'
@@ -13,6 +13,9 @@ import spanish from './locales/es.js'
 import italian from './locales/it.js'
 import portuguese from './locales/pt.js'
 import russian from './locales/ru.js'
+import arabic from './locales/ar.js'
+import hindi from './locales/hi.js'
+import indonesian from './locales/id.js'
 
 export {interfaceLanguages} from '../shared/locale.mjs'
 
@@ -27,6 +30,9 @@ const translations = {
   it: italian,
   pt: portuguese,
   ru: russian,
+  ar: arabic,
+  hi: hindi,
+  id: indonesian,
 }
 const LocaleContext = createContext(null)
 const storageKey = 'margin.ui-language'
@@ -34,7 +40,12 @@ const storageKey = 'margin.ui-language'
 export function translate(locale, message, parameters = {}) {
   const dictionary = translations[locale]
   const text = dictionary && Object.hasOwn(dictionary, message) ? dictionary[message] : message
-  return text.replace(/\{([A-Za-z]\w*)\}/g, (token, name) => Object.hasOwn(parameters, name) ? String(parameters[name]) : token)
+  return text.replace(/\{([A-Za-z]\w*)\}/g, (token, name) => {
+    if (!Object.hasOwn(parameters, name)) return token
+    const value = String(parameters[name])
+    // Keep paths and other mixed-direction values from reordering neighboring labels.
+    return interfaceDirection(locale) === 'rtl' ? `\u2068${value}\u2069` : value
+  })
 }
 
 const errorPatterns = [
@@ -62,10 +73,14 @@ export function LocaleProvider({api, initial, children}) {
   const [saveFailed, setSaveFailed] = useState(false)
   const revision = useRef(0)
   const locale = interfaceLocale(preference, systemLanguages)
+  const direction = interfaceDirection(locale)
   const formatNumber = useMemo(() => new Intl.NumberFormat(locale).format, [locale])
   const t = useMemo(() => (message, parameters) => translate(locale, message, parameters), [locale])
 
-  useEffect(() => { document.documentElement.lang = locale }, [locale])
+  useLayoutEffect(() => {
+    document.documentElement.lang = locale
+    document.documentElement.dir = direction
+  }, [locale, direction])
   useEffect(() => {
     let active = true
     let generation = 0
@@ -102,7 +117,7 @@ export function LocaleProvider({api, initial, children}) {
   }
 
   const languageError = saveFailed ? t('The interface language could not be saved. Choose it again to retry.') : ''
-  return <LocaleContext.Provider value={{t, locale, preference, setPreference, formatNumber, languageError}}>{children}</LocaleContext.Provider>
+  return <LocaleContext.Provider value={{t, locale, direction, preference, setPreference, formatNumber, languageError}}>{children}</LocaleContext.Provider>
 }
 
 export async function loadInterfaceLanguage(api) {

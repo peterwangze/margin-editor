@@ -10,10 +10,17 @@ export const interfaceLanguages = [
   {value: 'it', label: 'Italiano'},
   {value: 'pt', label: 'Português'},
   {value: 'ru', label: 'Русский'},
+  {value: 'ar', label: 'العربية', direction: 'rtl'},
+  {value: 'hi', label: 'हिन्दी'},
+  {value: 'id', label: 'Bahasa Indonesia'},
 ]
 
 const supported = new Set(interfaceLanguages.map(({value}) => value))
 const languageVariants = interfaceLanguages.map(({value}) => ({value, locale: new Intl.Locale(value).maximize()}))
+
+export function interfaceDirection(locale) {
+  return interfaceLanguages.find(({value}) => value === locale)?.direction ?? 'ltr'
+}
 
 export function languagePreference(value) {
   return supported.has(value) ? value : 'system'

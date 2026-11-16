@@ -34,7 +34,11 @@ const addedLocales = {
   it: {label: 'Italiano', settings: 'Impostazioni', preference: 'Lingua dell’interfaccia', system: 'Segui la lingua di sistema', editor: 'Editor di documenti', search: 'Trova e sostituisci', find: 'Trova', replace: 'Sostituisci', closeFind: 'Chiudi ricerca', replaceAll: 'Sostituisci tutto', undo: 'Annulla', font: 'Instrument Sans', glyphs: 'Già perché'},
   pt: {label: 'Português', settings: 'Configurações', preference: 'Idioma da interface', system: 'Usar idioma do sistema', editor: 'Editor de documentos', search: 'Localizar e substituir', find: 'Localizar', replace: 'Substituir', closeFind: 'Fechar barra de pesquisa', replaceAll: 'Substituir tudo', undo: 'Desfazer', font: 'Instrument Sans', glyphs: 'Edição e ação'},
   ru: {label: 'Русский', settings: 'Настройки', preference: 'Язык интерфейса', system: 'Как в системе', editor: 'Редактор документов', search: 'Поиск и замена', find: 'Найти', replace: 'Заменить', closeFind: 'Закрыть панель поиска', replaceAll: 'Заменить всё', undo: 'Отменить', font: 'Noto Sans', glyphs: 'Привет, мир! Ёж № 1'},
+  ar: {label: 'العربية', settings: 'الإعدادات', preferences: 'التفضيلات…', preference: 'لغة الواجهة', system: 'اتباع لغة النظام', editor: 'محرر المستندات', search: 'بحث واستبدال', find: 'بحث', replace: 'استبدال', closeFind: 'إغلاق البحث', replaceAll: 'استبدال الكل', undo: 'تراجع', font: 'Noto Sans Arabic', glyphs: 'مُحرِّر المستندات', script: /600-6ff/i, direction: 'rtl'},
+  hi: {label: 'हिन्दी', settings: 'सेटिंग्स', preferences: 'प्राथमिकताएँ…', preference: 'इंटरफ़ेस की भाषा', system: 'सिस्टम की भाषा अपनाएँ', editor: 'दस्तावेज़ संपादक', search: 'खोजें और बदलें', find: 'खोजें', replace: 'बदलें', closeFind: 'खोज पट्टी बंद करें', replaceAll: 'सभी बदलें', undo: 'पूर्ववत करें', font: 'Noto Sans Devanagari', glyphs: 'हिन्दी क्ष त्र ज्ञ', script: /900-97f/i},
+  id: {label: 'Bahasa Indonesia', settings: 'Pengaturan', preferences: 'Preferensi…', preference: 'Bahasa antarmuka', system: 'Ikuti sistem', editor: 'Editor dokumen', search: 'Cari dan ganti', find: 'Cari', replace: 'Ganti', closeFind: 'Tutup bilah pencarian', replaceAll: 'Ganti semua', undo: 'Urungkan', font: 'Instrument Sans', glyphs: 'Berkas dan penyunting'},
 }
+const savedLines = ['local edit', '中🙂', 'copy this']
 
 function stopApplication(force = false) {
   if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return
@@ -56,7 +60,7 @@ async function launch(systemLocale = 'zh-CN') {
   const {port} = server.address()
   await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
   const address = `http://127.0.0.1:${port}`
-  console.log(`Launching ${packageForm} on ${process.platform}/${process.arch}`)
+  console.log(`Launching ${packageForm} on ${process.platform}/${process.arch} with system locale ${systemLocale}`)
   let launchError
   child = spawn(executable, [
     `--remote-debugging-port=${port}`,
@@ -131,6 +135,20 @@ async function expectSavedLanguage(preference) {
   }).toBe(preference)
 }
 
+async function expectCleanRecoverySnapshot() {
+  // The restart harness terminates the process, so wait until recovery no longer contains the prior draft.
+  await expect.poll(async () => {
+    try {
+      const session = JSON.parse(await fs.readFile(path.join(profile, 'session.json'), 'utf8'))
+      const saved = session.docs.find(doc => doc.name === 'offline.txt')
+      return {text: saved?.text, dirty: saved?.dirty, rtl: session.settings?.rtl ?? false}
+    } catch (error) {
+      if (error.code === 'ENOENT' || error instanceof SyntaxError) return null
+      throw error
+    }
+  }).toEqual({text: savedLines.join('\n'), dirty: false, rtl: false})
+}
+
 const watchdog = setTimeout(() => {
   stopApplication(true)
   console.error(`Packaged application validation timed out.\n${output}`)
@@ -195,6 +213,7 @@ try {
   for (const [locale, labels] of Object.entries(addedLocales)) {
     await page.locator('dialog select').first().selectOption(locale)
     await expect(html).toHaveAttribute('lang', locale)
+    await expect(html).toHaveAttribute('dir', labels.direction ?? 'ltr')
     await expect(settingsLanguage(locale)).toHaveValue(locale)
     await expect(settingsLanguage(locale)).toBeFocused()
     await expect(settingsLanguage(locale).locator('option[value="system"]')).toHaveText(labels.system)
@@ -215,6 +234,17 @@ try {
       }, labels.glyphs)
       assert.ok(cyrillicFacesLoaded, 'Bundled Cyrillic interface and editor fonts load offline')
     }
+    if (labels.script) {
+      const faces = await page.evaluate(async ({font, glyphs}) => {
+        const weights = await Promise.all([400, 600].map(weight => document.fonts.load(`${weight} 14px "${font}"`, glyphs)))
+        return weights.flat().map(face => ({status: face.status, weight: face.weight, range: face.unicodeRange}))
+      }, {font: labels.font, glyphs: labels.glyphs})
+      for (const weight of ['400', '600']) {
+        assert.ok(faces.some(face => face.status === 'loaded' && face.weight === weight && labels.script.test(face.range)),
+          `Bundled ${labels.font} weight ${weight} loads offline`)
+      }
+      await expect(page.locator('.cm-editor')).toHaveCSS('font-family', new RegExp(labels.font))
+    }
     await page.evaluate(() => document.fonts.ready)
     await page.screenshot({path: path.join(evidence, `${packageForm}-${locale}.png`), animations: 'disabled'})
     await page.setViewportSize({width: 650, height: 540})
@@ -225,7 +255,7 @@ try {
     assert.ok(checkboxWidths.length > 0 && checkboxWidths.every(width => width >= 12), `Settings checkboxes have room in ${locale}`)
     await page.setViewportSize({width: 1024, height: 720})
   }
-  await settingsLanguage('ru').selectOption('en')
+  await settingsLanguage('id').selectOption('en')
   await expect(englishPreference).toHaveValue('en')
   await page.keyboard.press('Escape')
   await expect(englishFile).toBeVisible()
@@ -308,18 +338,7 @@ try {
   await expect(page.getByText('Saved offline.txt', {exact: true})).toBeVisible()
   assert.equal(await fs.readFile(file, 'utf8'), 'local edit\r\n中🙂\r\ncopy this')
 
-  // The restart harness terminates the process. Wait for the last recovery
-  // snapshot to reflect the completed save, so it cannot reopen an older draft.
-  await expect.poll(async () => {
-    try {
-      const session = JSON.parse(await fs.readFile(path.join(profile, 'session.json'), 'utf8'))
-      const saved = session.docs.find(doc => doc.name === 'offline.txt')
-      return {text: saved?.text, dirty: saved?.dirty}
-    } catch (error) {
-      if (error.code === 'ENOENT' || error instanceof SyntaxError) return null
-      throw error
-    }
-  }).toEqual({text: 'local edit\n中🙂\ncopy this', dirty: false})
+  await expectCleanRecoverySnapshot()
 
   await (await openLanguageSettings(false)).selectOption('zh-TW')
   await expectSavedLanguage('zh-TW')
@@ -412,6 +431,38 @@ try {
   await launch('ru-RU')
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru')
   await expect(page.getByRole('textbox', {name: addedLocales.ru.editor, exact: true})).toBeVisible()
+  await shutdown()
+  await launch('ar-EG')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ar')
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
+  await verifyRtlMenu()
+  const mixedArabic = 'مرحبا Margin 42'
+  await verifyNarrowLocalizedFind('ar', mixedArabic, () => verifyRtlSettings(mixedArabic))
+  const arabic = await openAddedSettings('ar')
+  await expect(arabic).toHaveValue('ar')
+  await expectSavedLanguage('ar')
+  await shutdown()
+  await launch('hi-IN')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ar')
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
+  const persistedArabic = await openAddedSettings('ar')
+  await expect(persistedArabic).toHaveValue('ar')
+  await persistedArabic.selectOption('system')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'hi')
+  await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
+  await expect(settingsLanguage('hi')).toHaveValue('system')
+  await expect(settingsLanguage('hi')).toBeFocused()
+  await expectSavedLanguage('system')
+  await page.keyboard.press('Escape')
+  await verifyNarrowLocalizedFind('hi', 'हिन्दी पाठ Margin 42')
+  await shutdown()
+  await launch('id-ID')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'id')
+  await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
+  const indonesian = await openAddedSettings('id')
+  await expect(indonesian).toHaveValue('system')
+  await page.keyboard.press('Escape')
+  await verifyNarrowLocalizedFind('id', 'Teks baru Margin 42')
   assert.deepEqual(pageErrors, [])
   await fs.writeFile(path.join(evidence, `${packageForm}.json`), JSON.stringify({
     platform: process.platform,
@@ -419,9 +470,9 @@ try {
     packageForm,
     interfaceLocales: ['en', 'zh-CN', ...Object.keys(addedLocales)],
     offline: 'Chromium used a loopback-only proxy and renderer HTTP(S) requests were blocked',
-    passed: ['desktop layout', 'narrow window', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'bundled Cyrillic fonts', 'CRLF save', 'find and replace', 'localized replacement and undo', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence'],
+    passed: ['desktop layout', 'narrow window', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'bundled Cyrillic fonts', 'bundled Arabic and Devanagari fonts', 'CRLF save', 'find and replace', 'localized replacement and undo', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence', 'rtl interface and document direction'],
   }, null, 2) + '\n')
-  console.log(`${packageForm}: layout, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup, undo and interface language persistence passed`)
+  console.log(`${packageForm}: layout, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup, undo, interface language persistence and RTL passed`)
 } catch (error) {
   await page?.screenshot({path: path.join(evidence, `${packageForm}-failed.png`)}).catch(() => {})
   console.error(output)
@@ -432,7 +483,7 @@ try {
   clearTimeout(watchdog)
 }
 
-async function openAddedSettings(locale, preferences) {
+async function openAddedSettings(locale, preferences = addedLocales[locale].preferences) {
   await page.getByRole('navigation').getByRole('button', {name: addedLocales[locale].settings, exact: true}).click()
   await page.getByRole('button', {name: new RegExp(`^${preferences}`)}).click()
   return settingsLanguage(locale)
@@ -451,7 +502,91 @@ async function verifyLocalizedFind(locale, beforeClose) {
   await region.getByRole('button', {name: labels.closeFind, exact: true}).click()
 }
 
-async function verifyNarrowLocalizedFind(locale, replacement) {
+async function assertHorizontalOrder(first, second, description) {
+  const [left, right] = await Promise.all([first.boundingBox(), second.boundingBox()])
+  assert.ok(left && right && left.x + left.width <= right.x + 1, description)
+}
+
+async function verifyRtlMenu() {
+  await page.setViewportSize({width: 650, height: 540})
+  const menu = page.getByRole('navigation')
+  const headers = menu.locator('.menu-group > button')
+  const fileHeader = menu.getByRole('button', {name: 'ملف', exact: true})
+  const helpHeader = menu.getByRole('button', {name: 'مساعدة', exact: true})
+  await expect(menu).toHaveCSS('direction', 'rtl')
+  await expect(headers.first()).toHaveText('ملف')
+  await expect(headers.last()).toHaveText('مساعدة')
+  const order = await headers.evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().left))
+  assert.ok(order.length > 2 && order.every((x, index) => index === 0 || x < order[index - 1]), 'Arabic menu headers run from right to left')
+  await assertHorizontalOrder(helpHeader, fileHeader, 'Help appears to the left of File in Arabic')
+  await fileHeader.focus()
+  await page.keyboard.press('ArrowLeft')
+  await expect(headers.nth(1)).toBeFocused()
+  await assertHorizontalOrder(headers.nth(1), fileHeader, 'ArrowLeft focuses the next header to the left')
+  await page.keyboard.press('ArrowRight')
+  await expect(fileHeader).toBeFocused()
+  for (const header of [fileHeader, helpHeader]) {
+    await header.press('Enter')
+    const dropdown = menu.locator('.menu-items')
+    await expect(dropdown).toBeVisible()
+    const fits = await dropdown.evaluate(element => {
+      const {left, right} = element.getBoundingClientRect()
+      return left >= -1 && right <= innerWidth + 1
+    })
+    assert.ok(fits, `Arabic dropdown ${await header.textContent()} fits the 650px window`)
+    await page.keyboard.press('Escape')
+    await expect(header).toBeFocused()
+  }
+}
+
+async function verifyRtlSettings(mixedText) {
+  const html = page.locator('html')
+  const editor = page.locator('.cm-editor')
+  const lines = editor.locator('.cm-line')
+  const expected = [...savedLines.slice(0, -1), mixedText]
+  const arabic = await openAddedSettings('ar')
+  const dialog = page.getByRole('dialog', {name: addedLocales.ar.settings, exact: true})
+  await expect(arabic).toHaveValue('system')
+  await expect(dialog).toHaveCSS('direction', 'rtl')
+  await assertHorizontalOrder(dialog.locator('.dialog-head button'), dialog.getByRole('heading'),
+    'The Settings heading is to the right of its close button in Arabic')
+  const rtlText = dialog.getByRole('checkbox', {name: 'النص من اليمين إلى اليسار', exact: true})
+  await expect(rtlText).not.toBeChecked()
+  await expect(editor).toHaveAttribute('dir', 'ltr')
+  await expect(editor.locator('.cm-content')).toHaveCSS('direction', 'ltr')
+  await rtlText.check()
+  await expect(html).toHaveAttribute('dir', 'rtl')
+  await expect(editor).toHaveAttribute('dir', 'rtl')
+  await expect(editor.locator('.cm-content')).toHaveCSS('direction', 'rtl')
+  await expect(lines).toHaveText(expected)
+
+  await arabic.focus()
+  await arabic.selectOption('en')
+  const englishDialog = page.getByRole('dialog', {name: 'Settings', exact: true})
+  const english = englishDialog.getByRole('combobox', {name: 'Interface language', exact: true})
+  await expect(html).toHaveAttribute('lang', 'en')
+  await expect(html).toHaveAttribute('dir', 'ltr')
+  await expect(english).toBeFocused()
+  await expect(englishDialog).toHaveCSS('direction', 'ltr')
+  await assertHorizontalOrder(englishDialog.getByRole('heading'), englishDialog.locator('.dialog-head button'),
+    'The Settings heading returns to the left of its close button in English')
+  await expect(editor.locator('.cm-content')).toHaveCSS('direction', 'rtl')
+  await expect(lines).toHaveText(expected)
+  await englishDialog.getByRole('checkbox', {name: 'Right-to-left text', exact: true}).uncheck()
+  await expect(editor).toHaveAttribute('dir', 'ltr')
+  await expect(editor.locator('.cm-content')).toHaveCSS('direction', 'ltr')
+
+  await english.focus()
+  await english.selectOption('ar')
+  await expect(html).toHaveAttribute('dir', 'rtl')
+  await expect(arabic).toBeFocused()
+  await expect(rtlText).not.toBeChecked()
+  await expect(editor).toHaveAttribute('dir', 'ltr')
+  await expect(lines).toHaveText(expected)
+  await page.keyboard.press('Escape')
+}
+
+async function verifyNarrowLocalizedFind(locale, replacement, afterReplace) {
   const labels = addedLocales[locale]
   await page.evaluate(() => document.fonts.ready)
   await page.setViewportSize({width: 650, height: 540})
@@ -461,25 +596,46 @@ async function verifyNarrowLocalizedFind(locale, replacement) {
       await page.setViewportSize({width, height: 540})
       for (const [element, label] of [[menu, 'menu'], [region, 'find bar']]) {
         const overflow = await element.evaluate(node => {
-          const right = Math.min(node.getBoundingClientRect().right, innerWidth)
-          return Math.max(...[...node.children].map(child => child.getBoundingClientRect().right - right), node.scrollWidth - node.clientWidth)
+          const rect = node.getBoundingClientRect()
+          const left = Math.max(rect.left, 0)
+          const right = Math.min(rect.right, innerWidth)
+          const children = [...node.children].map(child => child.getBoundingClientRect())
+          return Math.max(node.scrollWidth - node.clientWidth, ...children.flatMap(child => [left - child.left, child.right - right]))
         })
         assert.ok(overflow <= 1, `The ${label} fits a ${width}px window in ${locale} (${overflow}px overflow)`)
       }
     }
+    const find = region.getByRole('textbox', {name: labels.find, exact: true})
+    if (labels.direction === 'rtl') {
+      await expect(region).toHaveCSS('direction', 'rtl')
+      await expect(region.locator('.toggle-group button')).toHaveCSS('direction', 'ltr')
+      await assertHorizontalOrder(find, region.locator('label[for="find-value"]'), 'The Find label is to the right of its input in Arabic')
+      await expect(find).toHaveCSS('direction', 'ltr')
+    }
     const replaceAll = replacement && region.getByRole('button', {name: labels.replaceAll, exact: true})
     if (replaceAll) {
-      await region.getByRole('textbox', {name: labels.replace, exact: true}).fill(replacement)
+      const input = region.getByRole('textbox', {name: labels.replace, exact: true})
+      await input.fill(replacement)
       await expect(replaceAll).toBeEnabled()
+      if (labels.direction === 'rtl') {
+        await expect(input).toHaveCSS('direction', 'rtl')
+        await replaceAll.click()
+        await expect(page.locator('.cm-line').last()).toHaveText(replacement)
+        await find.fill(replacement)
+        await expect(find).toHaveCSS('direction', 'rtl')
+        await expect(page.locator('.search-hit')).toHaveText(replacement)
+      }
     }
     await page.screenshot({path: path.join(evidence, `${packageForm}-find-${locale}.png`), animations: 'disabled'})
-    if (replaceAll) await replaceAll.click()
+    if (replaceAll && labels.direction !== 'rtl') await replaceAll.click()
   })
   if (replacement) {
     const lastLine = page.locator('.cm-line').last()
     await expect(lastLine).toHaveText(replacement)
+    await afterReplace?.()
     await page.getByRole('toolbar').getByRole('button', {name: labels.undo, exact: true}).click()
     await expect(lastLine).toHaveText('copy this')
+    await expectCleanRecoverySnapshot()
   }
   await page.setViewportSize({width: 1024, height: 720})
 }

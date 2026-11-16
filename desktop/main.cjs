@@ -5,6 +5,7 @@ const {pathToFileURL} = require('node:url')
 const {Worker} = require('node:worker_threads')
 const {spawn} = require('node:child_process')
 const {createHash, randomUUID} = require('node:crypto')
+const {setTimeout: wait} = require('node:timers/promises')
 const {installMenu, saveDialogTitle} = require('./localized-menu.cjs')
 
 const profile = process.env.MARGIN_PROFILE || (process.env.PORTABLE_EXECUTABLE_DIR && path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'Margin Data'))
@@ -30,6 +31,20 @@ const files = import('./files.mjs')
 const language = import('../shared/locale.mjs')
 
 const languagePath = () => path.join(app.getPath('userData'), 'ui-language.json')
+
+async function writeProfile(file, data) {
+  const {atomicWrite} = await files
+  if (process.platform !== 'win32') return atomicWrite(file, data)
+  for (const delay of [25, 50, 100, 200, 400]) {
+    try { return await atomicWrite(file, data) }
+    catch (error) {
+      // Windows can briefly lock a profile file while another process reads it.
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw error
+      await wait(delay)
+    }
+  }
+  return atomicWrite(file, data)
+}
 
 function systemLanguages() {
   const testLocale = process.env.MARGIN_TEST_LOCALE
@@ -142,7 +157,7 @@ const actions = {
   async setInterfaceLanguage(preference) {
     uiPreference = (await language).languagePreference(preference)
     const data = JSON.stringify({preference: uiPreference})
-    const write = languageQueue.catch(() => {}).then(async () => (await files).atomicWrite(languagePath(), data))
+    const write = languageQueue.catch(() => {}).then(() => writeProfile(languagePath(), data))
     languageQueue = write
     await applyInterfaceLanguage()
     return write
@@ -214,7 +229,7 @@ const actions = {
     const file = path.join(app.getPath('userData'), 'session.json')
     const json = JSON.stringify(session)
     if (Buffer.byteLength(json) > 160 * 1024 * 1024) throw new Error('The session exceeds the recovery snapshot limit. Save some documents.')
-    const next = sessionQueue.catch(() => {}).then(async () => (await files).atomicWrite(file, json))
+    const next = sessionQueue.catch(() => {}).then(() => writeProfile(file, json))
     sessionQueue = next
     return next
   },
