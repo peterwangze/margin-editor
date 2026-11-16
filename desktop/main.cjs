@@ -188,8 +188,10 @@ const actions = {
     try {
       const artifact = await updater.installableUpdate(version)
       const profile = app.getPath('userData')
-      const debugPort = app.commandLine.getSwitchValue('remote-debugging-port')
-      const relaunchArgs = process.env.MARGIN_PROFILE && process.env.MARGIN_TEST_LOCALE && /^[1-9]\d*$/.test(debugPort)
+      // Packaged acceptance connects to a dedicated port after the old process exits.
+      const debugPort = process.env.MARGIN_TEST_RESTART_PORT
+      const relaunchArgs = process.env.MARGIN_PROFILE && process.env.MARGIN_TEST_LOCALE &&
+        /^[1-9]\d{0,4}$/.test(debugPort) && Number(debugPort) <= 65535
         ? [`--remote-debugging-port=${debugPort}`]
         : []
       if (process.platform === 'linux' && app.commandLine.hasSwitch('no-sandbox')) relaunchArgs.push('--no-sandbox')

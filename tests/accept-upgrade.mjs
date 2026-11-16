@@ -190,13 +190,15 @@ async function inspectCandidate(sha) {
   }
 }
 
-async function getPort() {
-  const server = createServer()
-  server.listen(0, '127.0.0.1')
-  await once(server, 'listening')
-  const {port} = server.address()
-  await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
-  return port
+async function getPorts() {
+  // Reserve both at once so a closed port cannot be reassigned to the other process.
+  const servers = [createServer().listen(0, '127.0.0.1'), createServer().listen(0, '127.0.0.1')]
+  try {
+    await Promise.all(servers.map(server => once(server, 'listening')))
+    return servers.map(server => server.address().port)
+  } finally {
+    await Promise.all(servers.map(server => new Promise(resolve => server.close(resolve))))
+  }
 }
 
 async function json(file) {
@@ -234,7 +236,12 @@ async function configureFetch(release) {
       }
       throw new Error(`Unexpected fixture request to ${target}`)
     }
-    return {pid: process.pid, version: instance.getVersion()}
+    return {
+      pid: process.pid,
+      version: instance.getVersion(),
+      debugPort: instance.commandLine.getSwitchValue('remote-debugging-port'),
+      restartPort: process.env.MARGIN_TEST_RESTART_PORT,
+    }
   }, {api, cdn, candidate, downloads, version, asset: release})
 }
 
@@ -245,13 +252,13 @@ try {
   await fs.writeFile(cleanFile, cleanText + '\r\n')
   await fs.writeFile(dirtyFile, savedText + '\r\n')
   const {executable, env} = await installBaseline()
-  const [sha, {size}, originalSha, port] = await Promise.all([
-    digest(candidate), fs.stat(candidate), digest(oldTarget), getPort(),
+  const [sha, {size}, originalSha, [port, restartPort]] = await Promise.all([
+    digest(candidate), fs.stat(candidate), digest(oldTarget), getPorts(),
   ])
   const args = [`--remote-debugging-port=${port}`, '--disable-background-networking', '--proxy-server=http://127.0.0.1:9', cleanFile, dirtyFile]
   app = await electron.launch({
     executablePath: executable, args, timeout: 50000,
-    env: {...process.env, ...env, MARGIN_PROFILE: profile, MARGIN_TEST_LOCALE: 'en-US'},
+    env: {...process.env, ...env, MARGIN_PROFILE: profile, MARGIN_TEST_LOCALE: 'en-US', MARGIN_TEST_RESTART_PORT: String(restartPort)},
   })
   const mainErrors = []
   app.on('console', message => {
@@ -260,6 +267,8 @@ try {
   const initial = await configureFetch({name: assetName, state: 'uploaded', size, digest: `sha256:${sha}`, browser_download_url: url})
   oldPid = initial.pid
   assert.equal(initial.version, previous)
+  assert.equal(initial.restartPort, String(restartPort))
+  console.log(`${form}: old debugger requested ${port}, Electron reports ${initial.debugPort || 'unset'}, restart debugger uses ${restartPort}`)
   const page = await app.firstWindow({timeout: 20000})
   const editor = page.getByRole('textbox', {name: 'Document editor', exact: true})
   await expect(page.getByRole('button', {name: `About Margin v${previous}`, exact: true})).toBeVisible()
@@ -318,7 +327,7 @@ try {
   console.log(`${form}: ${previous} downloaded and verified ${assetName}; starting native install`)
   await install.click({noWaitAfter: true})
 
-  const address = `http://127.0.0.1:${port}`
+  const address = `http://127.0.0.1:${restartPort}`
   const deadline = Date.now() + 95000
   while (processExists(oldPid)) {
     const message = await update.getByRole('alert').textContent({timeout: 350}).catch(() => null)
@@ -341,7 +350,7 @@ try {
       : undefined
     throw new Error(`${form}: application did not restart (${JSON.stringify({
       status: result?.status, version: result?.version, message: result?.message, diagnostic: result?.diagnostic,
-      readyVersion: ready?.version, readyPid: ready?.pid, database,
+      readyVersion: ready?.version, readyPid: ready?.pid, database, restartPort,
     })})`, {cause: error})
   }
   restartedBrowser = await chromium.connectOverCDP(address, {timeout: 15000})
