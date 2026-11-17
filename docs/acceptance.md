@@ -65,6 +65,17 @@ F01–F12 是早期迁移对照，保留子项和历史结果。当前产品承�
 
 安装包的 CI 通过表示已生成工件，带 Smoke 步骤的架构还验证了包内应用的真实编辑与磁盘操作。完整安装程序、系统文件关联和卸载用例需要独立证据。
 
+## v1.9.0 执行记录
+
+发行提交 `6f0db82e97d10ffd54a8ba1f7a80f9d62c0c5536`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43984808360) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43988609671) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.9.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.9.0/ACCEPTANCE.zip)
+
+| 范围 | 状态 | 已观察的结果 |
+| --- | --- | --- |
+| G01–G04、G06、G09 | 通过 | Windows、macOS 和 Linux 的 x64 与 ARM64 六组原生环境完成 12 个离线包的静态和实际交互检查。macOS ARM64 首次工件上传超时，同一候选提交复验及上传成功。 |
+| G07–G08 | 通过 | CI 从 1.6.99 测试构建升级到十种正式包，并验证文件、草稿和设置恢复。另在本机用公开的 1.8.0 Windows x64 便携版升级到隔离构建的 1.9.0，重启后验证了恢复及 Verilog 嵌套配对。发布后核对了更新器选出的十种升级包。 |
+| G10 | 通过 | 每个离线包均实际验证 Verilog 内外层配对、忽略注释和字符串、普通括号匹配、删除后提示缺配及补全后恢复。Shell 的 `if/fi` 同样通过。验收档案含 24 张配对与缺配截图，本机浏览器另验证了 VHDL 组合闭合词。 |
+| G05 | 通过 | GitHub Latest 为正式版。12 个离线包、验收档案和校验清单可公开下载，13 条 SHA-256 对应发布资产。 |
+
 ## v1.8.0 执行记录
 
 发行提交 `794ff4797e84e0c40ae06fb88abec3156ab5e0e2`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43834102183) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43838236730) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.8.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.8.0/ACCEPTANCE.zip)
