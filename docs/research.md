@@ -24,6 +24,17 @@ Margin 面向在 Windows、macOS 和 Linux 上记草稿、整理从网页或表�
 | 只修改一批符合条件的文件 | Notepad++ 提供文件过滤和是否递归，用户另提出最大目录深度。Kate 已有勾选结果后替换。这里的风险集中在范围看错和应用前文件已变。[目录深度请求](https://github.com/notepad-plus-plus/notepad-plus-plus/issues/18544) · [Notepad++ 查找手册](https://github.com/notepad-plus-plus/npp-usermanual/blob/1063c51df97e128f7860c6ea13d980eca89b4d10/content/docs/searching.md#find-in-files-tab) · [Kate 勾选替换](https://docs.kde.org/stable_kf6/en/kate/kate/kate-application-plugin-searchinfiles.html) | 输入文件过滤和最大深度，预览修改前后，排除一个文件再提交。另开进程改动预览中的文件，再提交时应阻止过时计划。对实际写入和跳过的文件逐一核验。 |
 | 在大日志里找到事件并就地改一个值 | Notepad++ 的贡献者说明其内存编辑模型的限制，手册记载可配置大文件触发关闭所有标签的自动换行。EmEditor 的分段加载说明了这一任务的可行交互。[大文件报告](https://github.com/notepad-plus-plus/notepad-plus-plus/issues/15620) · [Notepad++ 性能选项](https://github.com/notepad-plus-plus/npp-usermanual/blob/1063c51df97e128f7860c6ea13d980eca89b4d10/content/docs/preferences.md#performance) · [EmEditor 大文件支持](https://www.emeditor.com/text-editor-features/large-file-support/) | 在超过 48 MiB 的日志中搜索跨页命中，跳到目标页，编辑并保存。核对页以外的字节与原文件一致，其他文档可继续编辑。 |
 
+## 日常操作复查
+
+这次复查关注已有入口的可见性、操作范围和反馈。公开问题记录用于还原操作场景，Margin 的现状来自界面与代码走查。
+
+| 日常任务 | 观察与设计决定 |
+| --- | --- |
+| 查找或替换选中的文字 | BBEdit 的即时高亮帮助用户预判替换范围，并根据当前文档的选区启用选区查找。Margin 原先把选区范围放在选项里，切换文档后可能按整份文档查找。查找栏应明示范围，选区失效时暂停操作。匹配结果必须对应当前文档、选区与查询，才能用于替换。[BBEdit 16 手册](https://s3.amazonaws.com/BBSW-download/BBEdit_16.0_User_Manual.pdf) |
+| 从许多标签里找回文件 | Notepad++ 有用户报告固定标签也会滚出视野。Margin 的标签横向滚动，标签栏未直接提供文档列表。把列表入口放在标签栏，显示同名文件各自的路径，并标示当前文档和未保存状态。[Notepad++ 标签报告](https://github.com/notepad-plus-plus/notepad-plus-plus/issues/18298) |
+| 在窄窗继续编辑 | Notepad++ 用工具栏末端的下拉按钮提供放不下的操作。Margin 缩窄窗口后会隐藏整排文字标签。紧凑布局应保留新建、打开、保存、查找等入口的文字，完整命令继续从菜单可达。[Notepad++ 界面手册](https://github.com/notepad-plus-plus/npp-usermanual/blob/master/content/docs/user-interface.md#toolbar) |
+| 打开乱码文件或更改保存编码 | TextEdit 允许打开时选择编码。Margin 状态栏的编码按钮原先直达转换。应让用户从同一个入口看见重新读取与转换保存两条路径，分别说明何时改动磁盘文件。[Apple TextEdit 编码指南](https://support.apple.com/en-ca/guide/textedit/txted1028/mac) |
+
 ## 功能范围与证据
 
 正式版按[发行验收清单](acceptance.md)检查静态界面、键盘和可见反馈，并在 Windows、macOS、Linux 打包应用中实际打开、编辑、查找、保存和重开本地文件。研究对照说明为何选择场景，实际通过情况以相应版本的执行记录为准。

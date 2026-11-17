@@ -49,6 +49,8 @@ export default {
   'Find Next': 'अगला मिलान खोजें',
   'Searching…': 'खोज जारी है…',
   'Search error': 'खोज में त्रुटि',
+  'Select text to set the search range.': 'खोज का दायरा तय करने के लिए पाठ चुनें।',
+  'Use selection': 'चयन का उपयोग करें',
   '{current} of {total}{more}': '{total}{more} में से {current}',
   'No matches': 'कोई मिलान नहीं',
   'Search options': 'खोज विकल्प',

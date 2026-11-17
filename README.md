@@ -13,11 +13,12 @@ Open Margin and start typing. The menu, toolbar, and document tabs keep common a
 ## Edit and check your text
 
 - **Write a note or tidy a list.** Start in a blank document, drag in files, or split the view to read two places at once. Sort lines, remove duplicates, and use rectangular selections or multiple cursors for repeated edits.
+- **Find the right open file.** Same-name tabs show the folders they came from. Open the list beside the tabs to filter by filename or path and see which documents have unsaved edits.
 - **Get syntax highlighting as you type or paste.** Margin detects clear patterns in documents without a recognized filename and keeps uncertain content as plain text. Pick a syntax mode or return to **Automatic** from the status bar. Supported modes use blue semibold keywords in both themes. Place the cursor on a block keyword to see its matching partner or a missing match in Verilog, SystemVerilog, VHDL, Lua, Shell, and Pascal.
 - **Choose from 14 interface languages.** Margin supports English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German, Spanish, Italian, Portuguese, Russian, Arabic, Hindi, and Indonesian. It follows your system language by default. Open **Settings → Preferences → Interface language** to switch immediately. The app remembers your choice after a restart.
 - **Read and edit in the direction you need.** The Arabic interface reads right to left, and you can set the document direction separately under **Settings → Preferences → Right-to-left text**. Noto Sans Arabic and Noto Sans Devanagari are bundled for offline use in the interface and editor.
 - **Inspect text copied from elsewhere.** Open **Edit → Inspect & clean text** or click the length in the status bar. Count words and graphemes in the document, selection, or loaded page. Choose whether to trim trailing spaces and tabs, convert nonbreaking spaces, or remove zero-width spaces. Preview up to six changed lines and undo the cleanup in one step.
-- **Keep file formats under your control.** Reopen with a different encoding or explicitly convert on save. Reopening a Unicode file keeps its byte-order mark (BOM) setting. See line endings in the status bar and choose when to standardize a mixed file. Use **Save a copy** to write to a separate file.
+- **Keep file formats under your control.** Click the encoding in the status bar to choose between reopening with another encoding and converting on save. If decoding fails, reopen from the read-only notice. Reopening a Unicode file keeps its byte-order mark (BOM) setting. See line endings in the status bar and choose when to standardize a mixed file. Use **Save a copy** to write to a separate file.
 - **Pick up an interrupted edit.** Compare external disk changes before saving. Session recovery restores the last completed local snapshot. With recovery turned off, quitting with unsaved changes offers **Save All**, **Discard Changes**, and **Cancel**.
 - **Preview changes across a folder.** Find literal text, escapes, or Boost.Regex patterns. Filter by filename pattern and depth, see before and after, and choose the files to change. Margin checks that the disk files still match the preview before applying it.
 - **Find a line in a large log.** Search across pages with literal text or escapes, jump to the result, and edit the loaded page. Saving a page preserves bytes outside it in supported encodings.
@@ -27,6 +28,8 @@ Open Margin and start typing. The menu, toolbar, and document tabs keep common a
 *Inspect the selected text, see what the cleanup changes, and keep editing before you save.*
 
 ![The docked Find and Replace bar leaves the document in view and highlights the current match.](docs/screenshots/find.png)
+
+*The find bar shows the active scope. If a selection becomes invalid, replacement pauses until you set a new scope.*
 
 ![Margin's Simplified Chinese settings with the interface language selector.](docs/screenshots/interface-language.png)
 

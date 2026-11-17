@@ -1,22 +1,31 @@
-import {useEffect, useLayoutEffect, useRef, useState} from 'react'
+import {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
 import {EditorView} from '@codemirror/view'
 import {emptyQuery} from '../shared/text.mjs'
 import {useLocale} from './i18n'
 
 const empty = {matches: [], pending: false}
+const pending = {matches: [], pending: true}
 
-export function useFind(doc, selectedView, notify) {
+export function useFind(doc, selectedView, notify, slot) {
   const {t, formatNumber} = useLocale()
   const [show, setShow] = useState('')
   const [query, setQuery] = useState(emptyQuery)
-  const [result, setResult] = useState(empty)
-  const [index, setIndex] = useState(-1)
+  const [completed, setCompleted] = useState(null)
   const [range, setRange] = useState(null)
   const input = useRef(null)
   const focusOnOpen = useRef(false)
   const activeMatch = useRef(null)
   const current = useRef({})
-  current.current = {selectedView, doc}
+  const {id, text, epoch} = doc
+  const scopeUnavailable = query.inSelection &&
+    (range?.id !== id || range.slot !== slot || range.text !== text || range.epoch !== epoch || range.from >= range.to)
+  const request = useMemo(() => show && query.needle && !scopeUnavailable ? {
+    id, text, epoch, slot, query, range: query.inSelection ? {from: range.from, to: range.to} : undefined,
+  } : null, [show, query, scopeUnavailable, id, text, epoch, slot, range])
+  const answer = request && completed?.request === request ? completed : null
+  const result = answer?.result ?? (request ? pending : empty)
+  const index = answer?.index ?? -1
+  current.current = {selectedView, request}
 
   useLayoutEffect(() => {
     if (show && focusOnOpen.current) {
@@ -27,46 +36,55 @@ export function useFind(doc, selectedView, notify) {
   }, [show])
 
   useEffect(() => {
-    if (!show || !query.needle) { setResult(empty); setIndex(-1); return }
+    if (!request) return
     let worker
     let timeout
     let live = true
-    setResult({matches: [], pending: true})
+    const finish = (data, source) => {
+      clearTimeout(timeout)
+      worker?.terminate()
+      if (!live || current.current.request !== request) return
+      const matches = data.matches ?? []
+      const view = current.current.selectedView()
+      const resume = activeMatch.current
+      const cursor = resume && resume.source === source ? resume.position : view?.state.selection.main.from ?? 0
+      const candidate = matches.findIndex(match => match.from >= cursor)
+      setCompleted({request, source, result: {...data, matches}, index: candidate < 0 && request.query.wrap && matches.length ? 0 : candidate})
+      activeMatch.current = null
+    }
     const delay = setTimeout(() => {
-      worker = new Worker(new URL('./search.worker.js', import.meta.url), {type: 'module'})
-      timeout = setTimeout(() => { worker.terminate(); if (live) setResult({matches: [], error: 'Search timed out. Simplify the expression.'}) }, 1800)
-      worker.onmessage = ({data}) => {
-        clearTimeout(timeout)
-        worker.terminate()
-        if (!live) return
-        const matches = data.matches ?? []
-        setResult({...data, matches})
-        const view = current.current.selectedView()
-        const cursor = activeMatch.current ?? view?.state.selection.main.from ?? 0
-        const candidate = matches.findIndex(match => match.from >= cursor)
-        setIndex(candidate < 0 && query.wrap && matches.length ? 0 : candidate)
-        activeMatch.current = null
+      const document = current.current.selectedView()?.state.doc
+      const source = document?.toString() === request.text ? document : undefined
+      try {
+        worker = new Worker(new URL('./search.worker.js', import.meta.url), {type: 'module'})
+        timeout = setTimeout(() => finish({error: 'Search timed out. Simplify the expression.'}, source), 1800)
+        worker.onmessage = ({data}) => finish(data, source)
+        worker.onerror = () => finish({error: 'The search worker could not start.'}, source)
+        worker.postMessage({text: request.text, query: request.query, range: request.range})
+      } catch {
+        finish({error: 'The search worker could not start.'}, source)
       }
-      worker.onerror = () => { clearTimeout(timeout); if (live) setResult({matches: [], error: 'The search worker could not start.'}) }
-      worker.postMessage({text: doc.text, query, range: query.inSelection && range?.id === doc.id ? {from: range.from, to: Math.min(range.to, doc.text.length)} : undefined})
     }, 55)
     return () => { live = false; clearTimeout(delay); clearTimeout(timeout); worker?.terminate() }
-  }, [show, query, doc.id, doc.text, range])
+  }, [request])
 
   const change = value => {
-    if (value.inSelection) {
+    if (value.inSelection === true && (!query.inSelection || scopeUnavailable)) {
       const selection = selectedView()?.state.selection.main
       if (!selection || selection.empty) { notify(t('Select text before enabling In selection.')); return }
-      setRange({id: doc.id, from: selection.from, to: selection.to})
+      setRange({id, slot, text, epoch, from: selection.from, to: selection.to})
+    } else if (value.inSelection === false) {
+      setRange(null)
     }
-    setQuery({...query, ...value})
+    current.current.request = null
+    setQuery(previous => ({...previous, ...value}))
   }
   const open = (mode = 'find') => {
     const view = selectedView()
     const selection = view?.state.selection.main
-    if (selection && !selection.empty && selection.to - selection.from < 512) {
-      const text = view.state.sliceDoc(selection.from, selection.to)
-      if (!text.includes('\n')) setQuery({...query, needle: text, mode: 'literal', inSelection: false})
+    if (!show && !query.inSelection && selection && !selection.empty && selection.to - selection.from < 512) {
+      const selected = view.state.sliceDoc(selection.from, selection.to)
+      if (!selected.includes('\n')) setQuery(previous => ({...previous, needle: selected, mode: 'literal'}))
     }
     if (mode === show && input.current) {
       input.current.focus()
@@ -76,34 +94,51 @@ export function useFind(doc, selectedView, notify) {
       setShow(mode)
     }
   }
-  const close = () => { setShow(''); selectedView()?.focus() }
+  const close = () => { current.current.request = null; setShow(''); selectedView()?.focus() }
+  const readyView = () => {
+    const view = selectedView()
+    if (!answer || !view || current.current.request !== request) return null
+    const source = view.state.doc
+    const unchanged = answer.source ? source.eq(answer.source) : source.toString() === request.text
+    return unchanged ? view : null
+  }
   const next = step => {
     if (!show) { open('find'); return }
     const count = result.matches.length
-    if (!count || result.pending) return
-    const view = selectedView()
-    if (!view) return
+    const view = readyView()
+    if (!view || !count) return
     const current = result.matches[index]
-    const same = current && view.state.selection.main.from === current.from && view.state.selection.main.to === current.to
-    let i = index < 0 ? step < 0 ? count - 1 : 0 : same ? index + step : index
-    if (query.wrap) i = (i + count) % count
-    else if (i < 0 || i >= count) return
+    const {from, to} = view.state.selection.main
+    const same = current && from === current.from && to === current.to
+    let i = same ? index + step : step > 0
+      ? result.matches.findIndex(match => match.from >= from)
+      : result.matches.findLastIndex(match => match.to <= from)
+    if (i < 0 || i >= count) {
+      if (!query.wrap) return
+      i = step > 0 ? 0 : count - 1
+    }
     const match = result.matches[i]
-    if (match.to > view.state.doc.length) return
-    setIndex(i)
+    setCompleted({...answer, index: i})
     view.dispatch({selection: {anchor: match.from, head: match.to}, effects: EditorView.scrollIntoView(match.from, {y: 'center'})})
   }
   const apply = all => {
-    const view = selectedView()
-    if (!view || view.state.readOnly || !result.matches.length || result.pending) return
-    if (all && result.truncated) return
-    const match = result.matches[Math.max(index, 0)]
-    const changes = all ? result.matches : [match]
-    if (changes.at(-1).to > view.state.doc.length) return
-    if (query.inSelection && range?.id === doc.id) setRange({...range, to: range.to + changes.reduce((delta, item) => delta + item.insert.length - (item.to - item.from), 0)})
-    activeMatch.current = match.from + match.insert.length
+    const view = readyView()
+    if (!view || view.state.readOnly || !result.matches.length || (all ? result.truncated : index < 0)) return
+    const changes = all ? result.matches : [result.matches[index]]
+    if (changes.every(item => view.state.sliceDoc(item.from, item.to) === item.insert)) {
+      if (!all) next(1)
+      return
+    }
+    current.current.request = null
     view.dispatch({changes, userEvent: 'input.replace'})
+    if (query.inSelection) {
+      const delta = changes.reduce((total, item) => total + item.insert.length - (item.to - item.from), 0)
+      setRange({...range, to: range.to + delta, text: view.state.doc.toString()})
+    }
+    activeMatch.current = {source: view.state.doc, position: changes[0].from + changes[0].insert.length}
     notify(t(changes.length === 1 ? 'Replaced {count} match.' : 'Replaced {count} matches.', {count: formatNumber(changes.length)}))
   }
-  return {show, setShow, query, result, index, change, open, close, next, apply, input}
+  const canReplace = Boolean(readyView() && !doc.readOnly && result.matches.length)
+  const currentMatches = () => readyView() ? result.matches : empty.matches
+  return {show, setShow, query, result, index, scopeUnavailable, canReplace, currentMatches, change, open, close, next, apply, input}
 }

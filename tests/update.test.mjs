@@ -17,7 +17,7 @@ const digest = 'sha256:' + createHash('sha256').update(bytes).digest('hex')
 const asset = {name: filename, state: 'uploaded', size: bytes.length, digest, browser_download_url: url}
 const release = {tag_name: `v${version}`, draft: false, prerelease: false, body: 'Release notes', assets: [asset]}
 
-async function fixture(t, {installed = '1.9.0', metadata = release, content = bytes, redirect} = {}) {
+async function fixture(t, {installed = '1.9.0', metadata = release, content = bytes, redirect, downloadResponse = () => new Response(content)} = {}) {
   const downloads = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-update-'))
   t.after(() => fs.rm(downloads, {recursive: true, force: true}))
   const requested = []
@@ -31,10 +31,29 @@ async function fixture(t, {installed = '1.9.0', metadata = release, content = by
       if (input === api) return Response.json(metadata)
       if (redirect && input === url) return new Response(null, {status: 302, headers: {Location: redirect}})
       if (input === redirect) followed.push(input)
-      return new Response(content)
+      return downloadResponse()
     },
   })
   return {updater, downloads, requested, followed, revealed}
+}
+
+function interruptedResponse(content, options) {
+  let sent = false
+  // Make the stream report the interruption only when the reader asks for more bytes.
+  const body = new ReadableStream({
+    pull(controller) {
+      if (sent) controller.error(new Error('net::ERR_CONNECTION_CLOSED'))
+      else {
+        sent = true
+        controller.enqueue(content)
+      }
+    },
+  }, {highWaterMark: 0})
+  return new Response(body, options)
+}
+
+function remainingRange(offset) {
+  return {status: 206, headers: {'Content-Range': `bytes ${offset}-${bytes.length - 1}/${bytes.length}`}}
 }
 
 test('updater compares version components numerically and selects the matching package form', () => {
@@ -127,4 +146,62 @@ test('updater removes temporary files after disallowed redirects, wrong size or 
     assert.deepEqual(followed, [])
     await assert.rejects(updater.showDownloadedUpdate(), /could not be found/)
   }
+})
+
+test('updater continues interrupted downloads from staged bytes through fresh GitHub redirects', async t => {
+  const host = 'https://release-assets.githubusercontent.com/resume'
+  const responses = [
+    interruptedResponse(bytes.subarray(0, 3)),
+    interruptedResponse(bytes.subarray(3, 6), remainingRange(3)),
+    new Response(bytes.subarray(6), remainingRange(6)),
+  ]
+  const {updater, downloads, requested} = await fixture(t, {redirect: host, downloadResponse: () => responses.shift()})
+  await updater.checkForUpdates()
+  const {path: file} = await updater.downloadUpdate(version)
+  assert.deepEqual(requested.map(item => item.url), [api, url, host, url, host, url, host])
+  assert.deepEqual(requested.slice(1).map(item => new Headers(item.headers).get('range')), [
+    null, null, 'bytes=3-', 'bytes=3-', 'bytes=6-', 'bytes=6-',
+  ])
+  assert.ok(requested.slice(1).every(item => item.signal === requested[1].signal))
+  assert.deepEqual(await fs.readFile(file), bytes)
+  assert.deepEqual(await fs.readdir(downloads), [filename])
+  assert.equal((await updater.installableUpdate(version)).path, file)
+})
+
+test('updater rejects invalid continuation metadata and verifies the checksum after continuation', async t => {
+  const remaining = bytes.subarray(3)
+  for (const continuation of [
+    new Response(remaining),
+    new Response(remaining, {status: 206}),
+    new Response(remaining, {status: 206, headers: {'Content-Range': `bytes 2-${bytes.length - 1}/${bytes.length}`}}),
+    new Response(remaining, {status: 206, headers: {'Content-Range': `bytes 3-${bytes.length - 2}/${bytes.length}`}}),
+    new Response(remaining, {status: 206, headers: {'Content-Range': `bytes 3-${bytes.length - 1}/${bytes.length + 1}`}}),
+    new Response(Buffer.alloc(remaining.length), remainingRange(3)),
+  ]) {
+    const responses = [interruptedResponse(bytes.subarray(0, 3)), continuation]
+    const {updater, downloads, requested} = await fixture(t, {downloadResponse: () => responses.shift()})
+    const existing = path.join(downloads, filename)
+    await fs.writeFile(existing, 'keep this file')
+    await updater.checkForUpdates()
+    await assert.rejects(updater.downloadUpdate(version))
+    assert.deepEqual(requested.map(item => item.url), [api, url, url])
+    assert.equal(new Headers(requested.at(-1).headers).get('range'), 'bytes=3-')
+    assert.deepEqual(await fs.readdir(downloads), [filename])
+    assert.equal(await fs.readFile(existing, 'utf8'), 'keep this file')
+    await assert.rejects(updater.installableUpdate(version), /could not be found/)
+  }
+})
+
+test('updater cleans up the temporary file after exhausting continuation attempts', async t => {
+  const responses = [
+    interruptedResponse(bytes.subarray(0, 3)),
+    interruptedResponse(bytes.subarray(3, 6), remainingRange(3)),
+    interruptedResponse(bytes.subarray(6, 9), remainingRange(6)),
+  ]
+  const {updater, downloads, requested} = await fixture(t, {downloadResponse: () => responses.shift()})
+  await updater.checkForUpdates()
+  await assert.rejects(updater.downloadUpdate(version))
+  assert.deepEqual(requested.map(item => item.url), [api, url, url, url])
+  assert.deepEqual(requested.slice(1).map(item => new Headers(item.headers).get('range')), [null, 'bytes=3-', 'bytes=6-'])
+  assert.deepEqual(await fs.readdir(downloads), [])
 })

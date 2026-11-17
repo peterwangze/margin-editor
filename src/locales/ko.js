@@ -49,6 +49,8 @@ export default {
   'Find Next': '다음 찾기',
   'Searching…': '찾는 중…',
   'Search error': '검색 오류',
+  'Select text to set the search range.': '검색 범위로 사용할 텍스트를 선택하세요.',
+  'Use selection': '선택 영역 사용',
   '{current} of {total}{more}': '{total}{more}개 중 {current}번째',
   'No matches': '일치 항목 없음',
   'Search options': '검색 옵션',

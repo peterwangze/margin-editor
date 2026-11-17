@@ -8,13 +8,14 @@ const {createHash, randomUUID} = require('node:crypto')
 const {setTimeout: wait} = require('node:timers/promises')
 const {installMenu, saveDialogTitle} = require('./localized-menu.cjs')
 const {createUpdater} = require('./update.cjs')
+const updateNetwork = require('./update-network.cjs')
 
 const profile = process.env.MARGIN_PROFILE || (process.env.PORTABLE_EXECUTABLE_DIR && path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'Margin Data'))
 if (profile) app.setPath('userData', path.resolve(profile))
 const dist = path.join(__dirname, '../dist')
 const page = 'margin://local/index.html'
 const updater = createUpdater({
-  fetch: (...args) => globalThis.fetch(...args),
+  fetch: (...args) => updateNetwork.updateRequest(...args),
   getVersion: () => app.getVersion(),
   getDownloads: () => app.getPath('downloads'),
   showItemInFolder: file => shell.showItemInFolder(file),

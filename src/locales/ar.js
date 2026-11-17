@@ -49,6 +49,8 @@ export default {
   'Find Next': 'البحث عن التالي',
   'Searching…': 'جارٍ البحث…',
   'Search error': 'خطأ في البحث',
+  'Select text to set the search range.': 'حدّد نصًا لتعيين نطاق البحث.',
+  'Use selection': 'استخدم التحديد',
   '{current} of {total}{more}': '{current} من {total}{more}',
   'No matches': 'لا توجد مطابقات',
   'Search options': 'خيارات البحث',

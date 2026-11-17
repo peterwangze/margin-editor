@@ -259,13 +259,16 @@ async function settings(page) {
 const url = `${repository}/releases/download/v${version}/${assetName}`
 const cdn = 'https://release-assets.githubusercontent.com/margin-upgrade-fixture'
 
-async function configureFetch(release) {
+async function configureUpdateRequest(release) {
   return app.evaluate(({app: instance}, fixture) => {
     instance.setPath('downloads', fixture.downloads)
     const {createReadStream} = process.getBuiltinModule('node:fs')
+    const {createRequire} = process.getBuiltinModule('node:module')
+    const {join} = process.getBuiltinModule('node:path')
     const {Readable} = process.getBuiltinModule('node:stream')
+    const load = createRequire(join(instance.getAppPath(), 'package.json'))
     globalThis.marginFixtureMode = 'broken'
-    globalThis.fetch = async requested => {
+    load('./desktop/update-network.cjs').updateRequest = async requested => {
       const target = String(requested)
       if (target === fixture.api) {
         return Response.json({
@@ -309,7 +312,7 @@ try {
   app.on('console', message => {
     if (message.type() === 'error') mainErrors.push(message.text())
   })
-  const initial = await configureFetch({name: assetName, state: 'uploaded', size, digest: `sha256:${sha}`, browser_download_url: url})
+  const initial = await configureUpdateRequest({name: assetName, state: 'uploaded', size, digest: `sha256:${sha}`, browser_download_url: url})
   oldPid = initial.pid
   assert.equal(initial.version, previous)
   assert.equal(initial.restartPort, String(restartPort))

@@ -2,8 +2,6 @@ const {createHash, randomUUID} = require('node:crypto')
 const fs = require('node:fs/promises')
 const {constants, createReadStream} = require('node:fs')
 const path = require('node:path')
-const {Transform} = require('node:stream')
-const {pipeline} = require('node:stream/promises')
 
 const repository = 'peterwangze/margin-editor'
 const latestUrl = `https://api.github.com/repos/${repository}/releases/latest`
@@ -11,6 +9,7 @@ const releaseAssets = new Set(['release-assets.githubusercontent.com', 'objects.
 const stableTag = /^v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$/
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
 const hashPattern = /^sha256:([0-9a-f]{64})$/i
+const interruptedTransfer = /^net::ERR_(?:CONNECTION_(?:CLOSED|RESET|ABORTED)|NETWORK_CHANGED|TIMED_OUT|CONTENT_LENGTH_MISMATCH|INCOMPLETE_CHUNKED_ENCODING)$/
 
 // The release is always stable. A prerelease of the same numeric version is older.
 function compareToStable(current, latest) {
@@ -72,19 +71,24 @@ function allowedRedirect(location) {
   }
 }
 
-async function openResponse(fetch, url, {signal, download = false}) {
+async function openResponse(fetch, url, {signal, download = false, range}) {
+  const headers = {'User-Agent': 'Margin', Accept: download ? 'application/octet-stream' : 'application/vnd.github+json'}
+  if (range) headers.Range = `bytes=${range.offset}-`
   let location = url
   for (let redirects = 0; redirects <= 3; redirects++) {
     let response
     try {
       response = await fetch(location, {
-        redirect: 'manual', credentials: 'omit', signal,
-        headers: {'User-Agent': 'Margin', Accept: download ? 'application/octet-stream' : 'application/vnd.github+json'},
+        redirect: 'manual', credentials: 'omit', signal, headers,
       })
     } catch {
       throw new Error(signal.aborted ? 'The update request timed out.' : 'Could not connect to the update server.')
     }
-    if (response.status === 200 && response.body) return response.body
+    if (response.body) {
+      if (!range && response.status === 200) return response.body
+      if (range && response.status === 206 &&
+        response.headers.get('content-range') === `bytes ${range.offset}-${range.total - 1}/${range.total}`) return response.body
+    }
     await response.body?.cancel().catch(() => {})
     if (![301, 302, 303, 307, 308].includes(response.status)) throw new Error('The update server returned an error.')
     location = response.headers.get('location')
@@ -132,31 +136,41 @@ async function publishDownload(temp, downloads, name) {
   throw new Error('Could not choose a name for the update download.')
 }
 
+async function writeDownload(fetch, handle, asset) {
+  const signal = AbortSignal.timeout(10 * 60 * 1000)
+  const hash = createHash('sha256')
+  const badFile = 'The update download did not match its published checksum or size.'
+  let size = 0
+  for (let attemptsLeft = 3; attemptsLeft > 0; attemptsLeft--) {
+    const range = size ? {offset: size, total: asset.size} : undefined
+    const body = await openResponse(fetch, asset.url, {signal, download: true, range})
+    try {
+      for await (const chunk of body) {
+        signal.throwIfAborted()
+        if (size + chunk.length > asset.size) throw new Error(badFile)
+        await handle.writeFile(chunk)
+        hash.update(chunk)
+        size += chunk.length
+      }
+      break
+    } catch (error) {
+      if (attemptsLeft === 1 || signal.aborted || size >= asset.size || !interruptedTransfer.test(error.message)) throw error
+    }
+  }
+  signal.throwIfAborted()
+  if (size !== asset.size || hash.digest('hex') !== asset.digest) throw new Error(badFile)
+}
+
 async function saveDownload(fetch, downloads, asset) {
   await fs.mkdir(downloads, {recursive: true})
   const temp = path.join(downloads, `.margin-update-${randomUUID()}.part`)
   const handle = await fs.open(temp, 'wx', 0o600)
   try {
-    const signal = AbortSignal.timeout(10 * 60 * 1000)
-    const body = await openResponse(fetch, asset.url, {signal, download: true})
-    const hash = createHash('sha256')
-    let size = 0
-    const verify = new Transform({
-      transform(chunk, _encoding, callback) {
-        size += chunk.length
-        if (size > asset.size) return callback(new Error('The update download did not match its published checksum or size.'))
-        hash.update(chunk)
-        callback(null, chunk)
-      },
-    })
-    await pipeline(body, verify, handle.createWriteStream(), {signal})
-    if (size !== asset.size || hash.digest('hex') !== asset.digest) {
-      throw new Error('The update download did not match its published checksum or size.')
-    }
+    try { await writeDownload(fetch, handle, asset) }
+    finally { await handle.close() }
     const file = await publishDownload(temp, downloads, asset.name)
     return {path: file, stat: await fs.lstat(file)}
   } finally {
-    await handle.close()
     await fs.unlink(temp)
   }
 }

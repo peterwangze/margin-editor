@@ -1,6 +1,6 @@
-import {useEffect, useRef, useState} from 'react'
-import {Braces, File, FileText, FileCode, FilePlus, Folder, FolderOpen, Search, Replace, Settings2, Columns2, ChevronRight, Save, SaveAll, Printer, Scissors, Copy, Clipboard, Undo2, Redo2, X, Plus, Pin, Terminal, ArrowUp, ArrowDown, PanelLeft, WrapText, Pilcrow} from 'lucide-react'
-import {basename, documentTitle} from './documents'
+import {useEffect, useMemo, useRef, useState} from 'react'
+import {Braces, File, FileText, FileCode, FilePlus, Folder, FolderOpen, Search, Replace, Settings2, Columns2, ChevronRight, List, Save, SaveAll, Printer, Scissors, Copy, Clipboard, Undo2, Redo2, X, Plus, Pin, Terminal, ArrowUp, ArrowDown, PanelLeft, WrapText, Pilcrow} from 'lucide-react'
+import {basename, documentTitle, tabFolders} from './documents'
 import {errorMessage, useLocale} from './i18n'
 
 export const primaryKey = (navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+')
@@ -20,11 +20,12 @@ export function FileGlyph({name, size = 15}) {
 }
 
 const toolGroups = [
-  [['new', FilePlus, 'New'], ['open', FolderOpen, 'Open'], ['save', Save, 'Save'], ['saveAll', SaveAll, 'Save All'], ['print', Printer, 'Print']],
-  [['cut', Scissors, 'Cut'], ['copy', Copy, 'Copy'], ['paste', Clipboard, 'Paste']],
-  [['undo', Undo2, 'Undo'], ['redo', Redo2, 'Redo']],
-  [['find', Search, 'Find'], ['replace', Replace, 'Replace']],
-  [['wrap', WrapText, 'Word Wrap'], ['whitespace', Pilcrow, 'Whitespace'], ['split', Columns2, 'Split']],
+  ['core', [['new', FilePlus, 'New'], ['open', FolderOpen, 'Open'], ['save', Save, 'Save']]],
+  ['history', [['undo', Undo2, 'Undo'], ['redo', Redo2, 'Redo']]],
+  ['core', [['find', Search, 'Find'], ['replace', Replace, 'Replace']]],
+  ['secondary', [['saveAll', SaveAll, 'Save All'], ['print', Printer, 'Print']]],
+  ['secondary', [['cut', Scissors, 'Cut'], ['copy', Copy, 'Copy'], ['paste', Clipboard, 'Paste']]],
+  ['secondary', [['wrap', WrapText, 'Word Wrap'], ['whitespace', Pilcrow, 'Whitespace'], ['split', Columns2, 'Split']]],
 ]
 
 export function Chrome({menus, commands, invoke, platform, doc, toggled, version}) {
@@ -90,7 +91,7 @@ export function Chrome({menus, commands, invoke, platform, doc, toggled, version
       </div>)}
     </nav>
     <div className="toolbar" role="toolbar" aria-label={t('Editor toolbar')}>
-      {toolGroups.map(group => <div className="tool-group" key={group[0][0]}>{group.map(([id, Icon, text]) => <IconButton key={id} icon={Icon} label={commands[id].label} title={[commands[id].label, shortcutLabel(commands[id].key)].filter(Boolean).join(' · ')} disabled={commands[id].disabled} aria-pressed={toggled[id]} onClick={() => invoke(id)}><span>{t(text)}</span></IconButton>)}</div>)}
+      {toolGroups.map(([kind, group]) => <div className={`tool-group tool-${kind}`} key={group[0][0]}>{group.map(([id, Icon, text]) => <IconButton key={id} className={`tool-${kind}`} icon={Icon} label={commands[id].label} title={[commands[id].label, shortcutLabel(commands[id].key)].filter(Boolean).join(' · ')} disabled={commands[id].disabled} aria-pressed={toggled[id]} onClick={() => invoke(id)}><span>{t(text)}</span></IconButton>)}</div>)}
     </div>
   </>
 }
@@ -127,42 +128,60 @@ export function Explorer({docs, active, workspace, entries, api, openPath, focus
   </aside>
 }
 
-export function Tabs({docs, active, focus, close, add, reorder, context, pane}) {
+export function Tabs({docs, active, focus, close, add, list, reorder, context, pane}) {
   const {t} = useLocale()
   const activeTab = useRef(null)
-  useEffect(() => { activeTab.current?.scrollIntoView({block: 'nearest', inline: 'nearest'}) }, [active, t])
+  const scroll = useRef(null)
+  const folders = useMemo(() => tabFolders(docs), [docs])
+  useEffect(() => {
+    const reveal = () => activeTab.current?.scrollIntoView({block: 'nearest', inline: 'nearest'})
+    reveal()
+    const observer = new ResizeObserver(reveal)
+    observer.observe(scroll.current)
+    if (activeTab.current) observer.observe(activeTab.current)
+    return () => observer.disconnect()
+  }, [active, t])
   return <div className="tabs" aria-label={pane === 'main' ? t('main documents') : t('secondary documents')}>
-    <div className="tab-scroll" role="tablist">
+    <div className="tab-scroll" role="tablist" ref={scroll}>
       {docs.map(doc => {
         const title = documentTitle(doc, t)
         return <div key={doc.id} className={`tab ${doc.id === active ? 'selected' : ''}`} ref={doc.id === active ? activeTab : null} draggable onDragStart={event => event.dataTransfer.setData('application/x-margin-tab', doc.id)} onDragOver={event => event.preventDefault()} onDrop={event => {
           const id = event.dataTransfer.getData('application/x-margin-tab')
           if (id) { event.preventDefault(); event.stopPropagation(); reorder(id, doc.id) }
         }} onAuxClick={event => { if (event.button === 1) { event.preventDefault(); close(doc.id) } }} onContextMenu={event => { event.preventDefault(); context(doc, event.clientX, event.clientY) }}>
-          <button type="button" className="tab-name" role="tab" aria-selected={doc.id === active} title={doc.path ?? title} onClick={() => focus(doc.id)}><FileGlyph name={doc.name} /><span dir="auto">{title}</span>{doc.pinned && <Pin size={12} />}{doc.dirty && <span className="dirty-mark" aria-label={t('Unsaved')} />}</button>
+          <button type="button" className="tab-name" role="tab" aria-selected={doc.id === active} title={doc.path ?? title} onClick={() => focus(doc.id)}><FileGlyph name={doc.name} /><span className="tab-caption" dir="auto">{title}</span>{folders.has(doc.id) && <bdi className="tab-folder">{folders.get(doc.id)}</bdi>}{doc.pinned && <Pin size={12} />}{doc.dirty && <span className="dirty-mark" aria-label={t('Unsaved')} />}</button>
           <IconButton icon={X} className="tab-close" label={t('Close {name}', {name: title})} onClick={() => close(doc.id)} />
         </div>
       })}
     </div>
     <IconButton icon={Plus} label={t('New tab')} onClick={add} />
+    {docs.length > 1 && <IconButton icon={List} className="tab-list" label={t('Open documents…')} aria-haspopup="dialog" onClick={list} />}
   </div>
 }
 
-export function FindBar({query, change, replace, result, index, next, apply, close, mark, options, input}) {
+export function FindBar({find, paged, mark, options}) {
+  const {query, change, show, result, index, next, apply, close, input, scopeUnavailable, canReplace} = find
   const {t, formatNumber} = useLocale()
-  const count = result.pending ? t('Searching…') : result.error ? t('Search error') : result.matches.length
-    ? t('{current} of {total}{more}', {current: formatNumber(index + 1), total: formatNumber(result.matches.length), more: result.truncated ? '+' : ''})
-    : t('No matches')
+  const hasMatches = result.matches.length > 0 && !result.pending && !scopeUnavailable
+  const total = `${formatNumber(result.matches.length)}${result.truncated ? '+' : ''}`
+  const count = !query.needle || scopeUnavailable ? '' : result.pending ? t('Searching…') : result.error ? t('Search error') : !hasMatches ? t('No matches')
+    : index < 0 ? t('{count} matches', {count: total})
+    : t('{current} of {total}{more}', {current: formatNumber(index + 1), total: formatNumber(result.matches.length), more: result.truncated ? '+' : ''})
   return <section className="findbar" aria-label={t('Find and replace')} onKeyDown={event => { if (event.key === 'Escape') close() }}>
     <div className="find-row">
-      <label htmlFor="find-value">{t('Find')}</label><input ref={input} id="find-value" dir="auto" value={query.needle} onChange={event => change({needle: event.target.value})} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); next(event.shiftKey ? -1 : 1) } }} autoComplete="off" />
-      <label className="find-check"><input type="checkbox" checked={query.caseSensitive} onChange={event => change({caseSensitive: event.target.checked})} /><span>{t('Match case')}</span></label><label className="find-check"><input type="checkbox" checked={query.whole} onChange={event => change({whole: event.target.checked})} /><span>{t('Whole word')}</span></label>
-      <div className="toggle-group"><button type="button" dir="ltr" title={t('Regular expression')} aria-label={t('Regular expression')} aria-pressed={query.mode === 'regex'} onClick={() => change({mode: query.mode === 'regex' ? 'literal' : 'regex'})}>.*</button></div>
-      <div className="find-arrows"><IconButton className="outline-button" icon={ArrowUp} label={t('Previous match')} onClick={() => next(-1)}><span>{t('Previous')}</span></IconButton><IconButton className="primary-button" icon={ArrowDown} label={t('Next match')} onClick={() => next(1)}><span>{t('Find Next')}</span></IconButton></div>
+      <label htmlFor="find-value">{t('Find')}</label><input ref={input} id="find-value" dir="auto" value={query.needle} onChange={event => change({needle: event.target.value})} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); next(event.shiftKey ? -1 : 1) } }} autoComplete="off" />
+      <div className="find-arrows"><IconButton className="outline-button" icon={ArrowUp} label={t('Previous match')} disabled={!hasMatches} onClick={() => next(-1)} /><IconButton className="outline-button" icon={ArrowDown} label={t('Next match')} disabled={!hasMatches} onClick={() => next(1)} /></div>
       <span className="find-count" role="status">{count}</span>
       <IconButton icon={Settings2} label={t('Search options')} onClick={options} /><IconButton icon={X} label={t('Close find')} onClick={close} />
     </div>
-    {replace && <div className="find-row replace-row"><label htmlFor="replace-value">{t('Replace')}</label><input id="replace-value" dir="auto" value={query.replacement} onChange={event => change({replacement: event.target.value})} /><button className="outline-button" disabled={!result.matches.length || result.pending} onClick={() => apply(false)}>{t('Replace')}</button><button className="outline-button" disabled={!result.matches.length || result.truncated || result.pending} onClick={() => apply(true)}>{t('Replace All')}</button><button className="text-button" disabled={!result.matches.length || result.pending} onClick={mark}>{t('Bookmark')}</button></div>}
+    <div className="find-options-row">
+      <label className="find-check"><input type="checkbox" checked={query.caseSensitive} onChange={event => change({caseSensitive: event.target.checked})} /><span>{t('Match case')}</span></label><label className="find-check"><input type="checkbox" checked={query.whole} onChange={event => change({whole: event.target.checked})} /><span>{t('Whole word')}</span></label>
+      <div className="toggle-group"><button type="button" dir="ltr" title={t('Regular expression')} aria-label={t('Regular expression')} aria-pressed={query.mode === 'regex'} onClick={() => change({mode: query.mode === 'regex' ? 'literal' : 'regex'})}>.*</button></div>
+      <label className="find-check find-scope"><input type="checkbox" checked={query.inSelection} onChange={event => change({inSelection: event.target.checked})} /><span>{t('In selection')}</span></label>
+      {!query.inSelection && <span className="find-scope-label">{t(paged ? 'Loaded page' : 'Whole document')}</span>}
+    </div>
+    {scopeUnavailable && <div className="find-scope-warning"><span role="alert">{t('Select text to set the search range.')}</span><button className="outline-button" onClick={() => change({inSelection: true})}>{t('Use selection')}</button></div>}
+    {show === 'replace' && <div className="find-row replace-row"><label htmlFor="replace-value">{t('Replace')}</label><input id="replace-value" dir="auto" value={query.replacement} onChange={event => change({replacement: event.target.value})} /><button className="outline-button" disabled={!hasMatches || !canReplace || index < 0} onClick={() => apply(false)}>{t('Replace')}</button><button className="outline-button" disabled={!hasMatches || !canReplace || result.truncated} onClick={() => apply(true)}>{t('Replace All')}</button><button className="text-button" disabled={!hasMatches} onClick={mark}>{t('Bookmark')}</button></div>}
     {result.error && <p className="inline-error" role="alert">{errorMessage(t, result.error)}</p>}
   </section>
 }

@@ -50,6 +50,8 @@ export default {
   'Find Next': '次を検索',
   'Searching…': '検索中…',
   'Search error': '検索エラー',
+  'Select text to set the search range.': '検索範囲にするテキストを選択してください。',
+  'Use selection': '選択範囲を使う',
   '{current} of {total}{more}': '{total}{more} 件中 {current} 件目',
   'No matches': '一致する項目はありません',
   'Search options': '検索オプション',

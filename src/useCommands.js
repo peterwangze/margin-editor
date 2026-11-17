@@ -90,9 +90,11 @@ export function useCommands(ctx) {
     })
   }
   function markMatches() {
+    const matches = find.currentMatches()
+    if (!matches.length) return
     edit(view => {
       const lines = new Set(doc.bookmarks)
-      for (const match of find.result.matches) if (match.from <= view.state.doc.length) lines.add(view.state.doc.lineAt(match.from).number)
+      for (const match of matches) if (match.from <= view.state.doc.length) lines.add(view.state.doc.lineAt(match.from).number)
       m.amend(doc.id, {bookmarks: [...lines].sort((a, b) => a - b)})
       notify(t('{count} bookmarked lines.', {count: formatNumber(lines.size)}))
     })
@@ -148,7 +150,10 @@ export function useCommands(ctx) {
       m.commit(items => [...items, ...samples])
       m.focus(samples.at(-1).id)
     },
-    documents: () => pick('Open Documents', m.docs.map(item => ({id: item.id, label: documentTitle(item, t), detail: item.path})), item => m.focus(item.id)),
+    documents: (slot = m.slot) => pick('Open Documents', m.docs.map(item => ({
+      id: item.id, label: documentTitle(item, t), detail: item.path,
+      dirty: item.dirty, current: item.id === (slot === 'main' ? m.main : m.secondary),
+    })), item => m.focus(item.id, slot)),
     previousTab: () => m.focus(m.docs[(m.docs.findIndex(item => item.id === doc.id) + m.docs.length - 1) % m.docs.length].id),
     nextTab: () => m.focus(m.docs[(m.docs.findIndex(item => item.id === doc.id) + 1) % m.docs.length].id),
     recent: () => pick('Recent Files', m.recent.map(path => ({id: path, label: basename(path), detail: path})), item => m.openPath(item.id)),
@@ -217,7 +222,10 @@ export function useCommands(ctx) {
     find: () => find.open('find'), replace: () => find.open('replace'), next: () => find.next(1), previous: () => find.next(-1), projectSearch: () => setPanel('search'),
     wholeFile: () => setDialog({kind: 'large-search'}),
     findOpen: () => ctx.openDocumentsSearch(),
-    searchOptions: () => textDialog('Find options', [field('mode', 'Search mode', find.query.mode, {options: ['literal', 'extended', 'regex']}), field('wrap', 'Wrap around', find.query.wrap, {type: 'checkbox'}), field('dotAll', 'Dot matches newline', find.query.dotAll, {type: 'checkbox'}), field('inSelection', 'In selection', find.query.inSelection, {type: 'checkbox'})], value => { find.change(value); if (!find.show) find.setShow('find') }),
+    searchOptions: () => textDialog('Find options', [field('mode', 'Search mode', find.query.mode, {options: ['literal', 'extended', 'regex']}), field('wrap', 'Wrap around', find.query.wrap, {type: 'checkbox'}), field('dotAll', 'Dot matches newline', find.query.dotAll, {type: 'checkbox'}), field('inSelection', 'In selection', find.query.inSelection, {type: 'checkbox'})], ({inSelection, ...options}) => {
+      find.change(inSelection === find.query.inSelection ? options : {...options, inSelection})
+      if (!find.show) find.setShow('find')
+    }),
     goto: () => textDialog('Go to line', [field('line', 'Line', '1', {type: 'number', required: true, min: 1}), field('column', 'Column', '1', {type: 'number', min: 1})], ({line, column}) => goTo(m.selectedView(), Number(line), Number(column))),
     symbol: () => pick('Go to Symbol', symbolsFor(doc, m.settings.languages.find(item => item.name === doc.language)?.outline).map(item => ({id: item.line, label: item.name, detail: t('Line {line}', {line: formatNumber(item.line)})})), item => goTo(m.selectedView(), item.id)),
     bookmark: () => bookmark(0), markMatches, nextBookmark: () => bookmark(1), prevBookmark: () => bookmark(-1), copyBookmarks: () => modifyBookmarks(false), removeBookmarks: () => modifyBookmarks(true), clearBookmarks: () => m.amend(doc.id, {bookmarks: []}),
@@ -287,5 +295,5 @@ export function useCommands(ctx) {
   const requiresPath = new Set(['reload', 'reveal', 'rename', 'trash', 'reinterpret', 'tail'])
   const requiresWholeDocument = new Set(['saveAs', 'saveCopy', 'rename', 'readOnly', 'convert', 'lf', 'crlf', 'cr', 'diff'])
   const groups = Object.fromEntries(Object.entries(menus).flatMap(([group, ids]) => ids.map(id => [id, group])))
-  return Object.fromEntries(Object.entries(definitions).map(([id, [label, key]]) => [id, {id, group: t(groups[id] ?? ''), label: t(id === 'macroRecord' && recording ? 'Stop macro recording' : label), key: m.settings.shortcuts[id] ?? key, action: actions[id], disabled: (id === 'wholeFile' && (!doc.large?.editable || doc.dirty)) || (requiresPath.has(id) && !doc.path) || (Boolean(doc.large) && (requiresWholeDocument.has(id) || id === 'save' && doc.readOnly))}]))
+  return Object.fromEntries(Object.entries(definitions).map(([id, [label, key]]) => [id, {id, group: t(groups[id] ?? ''), label: t(id === 'macroRecord' && recording ? 'Stop macro recording' : label), key: m.settings.shortcuts[id] ?? key, action: actions[id], disabled: (id === 'wholeFile' && (!doc.large?.editable || doc.dirty)) || (requiresPath.has(id) && !doc.path) || (id === 'convert' && doc.readOnly) || (Boolean(doc.large) && (requiresWholeDocument.has(id) || id === 'save' && doc.readOnly))}]))
 }

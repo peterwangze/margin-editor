@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {once} from 'node:events'
 import {execFile} from 'node:child_process'
 import {createHash} from 'node:crypto'
+import {createServer} from 'node:http'
 import {promisify} from 'node:util'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -15,8 +16,13 @@ import {interfaceDirection, interfaceLocale} from '../shared/locale.mjs'
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control'
 const executablePath = process.env.MARGIN_EXECUTABLE || undefined
 
-async function launch(profile, files = [], testLocale = 'en-US') {
-  const app = await electron.launch({executablePath, args: [...(executablePath ? [] : ['.']), ...files], env: {...process.env, MARGIN_PROFILE: profile, MARGIN_TEST_LOCALE: testLocale}, timeout: 25000})
+async function launch(profile, files = [], testLocale = 'en-US', switches = []) {
+  const app = await electron.launch({
+    executablePath,
+    args: [...(executablePath ? [] : ['.']), ...switches, ...files],
+    env: {...process.env, MARGIN_PROFILE: profile, MARGIN_TEST_LOCALE: testLocale},
+    timeout: 25000,
+  })
   try {
     const page = await app.firstWindow({timeout: 15000})
     await expect(page.locator('.cm-content')).toBeVisible({timeout: 12000})
@@ -121,6 +127,125 @@ test('G01 shows the installed version with a long filename and opens the About l
     .toBe('https://github.com/peterwangze/margin-editor')
 })
 
+test('G07 routes the HTTPS update check through the configured proxy', {timeout: 50000}, async t => {
+  const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-update-proxy-'))
+  const targets = []
+  const proxy = createServer((_request, response) => response.writeHead(502).end())
+  proxy.on('connect', (request, socket) => {
+    targets.push(request.url)
+    socket.end('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n')
+  })
+  let app
+  t.after(async () => {
+    await app?.close().catch(() => {})
+    await new Promise(resolve => proxy.close(resolve))
+    await fs.rm(profile, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  proxy.listen(0, '127.0.0.1')
+  await once(proxy, 'listening')
+  const {app: openedApp, page} = await launch(profile, [], 'en-US', [`--proxy-server=http://127.0.0.1:${proxy.address().port}`])
+  app = openedApp
+  // Keep the regression case offline even if the updater reverts to Node's fetch.
+  await app.evaluate(() => {
+    globalThis.testDirectUpdateRequest = false
+    globalThis.fetch = async () => {
+      globalThis.testDirectUpdateRequest = true
+      throw new Error('Direct network access disabled by test')
+    }
+  })
+
+  await page.getByRole('button', {name: 'Help', exact: true}).click()
+  await page.getByRole('button', {name: 'Check for updates', exact: true}).click()
+  await expect.poll(() => targets).toContain('api.github.com:443')
+  const updater = page.getByRole('dialog', {name: 'Check for updates', exact: true})
+  await expect(updater.getByText('Could not check for updates.', {exact: true})).toBeVisible()
+  assert.equal(await app.evaluate(() => globalThis.testDirectUpdateRequest), false)
+})
+
+test('G07 reads redirects, streams the response and cancels stalled requests', {timeout: 50000}, async t => {
+  const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-update-timeout-'))
+  const requests = []
+  const closed = []
+  let range
+  let interruptedSocket
+  const server = createServer((request, response) => {
+    requests.push(request.url)
+    if (request.url === '/redirect') {
+      const location = `http://127.0.0.1:${server.address().port}/unexpected`
+      return response.writeHead(302, {Location: location}).end()
+    }
+    if (request.url === '/range') {
+      range = request.headers.range
+      return response.writeHead(206, {'Content-Range': 'bytes 4-15/16'}).end('resumed body')
+    }
+    if (request.url === '/interrupted') {
+      interruptedSocket = response.socket
+      response.writeHead(200, {'Content-Length': '32', 'Content-Type': 'application/octet-stream', 'X-Content-Type-Options': 'nosniff'})
+      return response.write('partial update response')
+    }
+    response.once('close', () => closed.push(request.url))
+    if (request.url === '/body') {
+      response.writeHead(200, {'Content-Type': 'application/octet-stream', 'X-Content-Type-Options': 'nosniff'})
+      response.write('partial update response')
+    }
+  })
+  let app
+  t.after(async () => {
+    await app?.close().catch(() => {})
+    server.closeAllConnections()
+    await new Promise(resolve => server.close(resolve))
+    await fs.rm(profile, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const opened = await launch(profile)
+  app = opened.app
+
+  const origin = `http://127.0.0.1:${server.address().port}`
+  const result = await app.evaluate(async ({app}, origin) => {
+    const {createRequire} = process.getBuiltinModule('node:module')
+    const {join} = process.getBuiltinModule('node:path')
+    const load = createRequire(join(app.getAppPath(), 'package.json'))
+    const {updateRequest} = load('./desktop/update-network.cjs')
+    const request = (resource, milliseconds, headers = {}) => updateRequest(origin + resource, {headers, signal: AbortSignal.timeout(milliseconds)})
+    const redirect = await request('/redirect', 4000)
+    const partial = await request('/range', 4000, {Range: 'bytes=4-'})
+    const text = await new Response(partial.body).text()
+    const stalls = await Promise.all(['/headers', '/body'].map(resource => {
+      let receivedHeaders = false
+      const completion = request(resource, 1200)
+        .then(response => {
+          receivedHeaders = true
+          return new Response(response.body).text()
+        })
+        .catch(error => ({receivedHeaders, error: error.name}))
+      const backstop = new Promise(resolve => setTimeout(resolve, 4000, 'request stayed open'))
+      return Promise.race([completion, backstop])
+    }))
+    const interrupted = await request('/interrupted', 10000)
+    const reader = interrupted.body.getReader()
+    const {value} = await reader.read()
+    globalThis.testInterruptedUpdateReader = reader
+    return {
+      redirectStatus: redirect.status, location: redirect.headers.get('location'), redirectBody: redirect.body,
+      partialStatus: partial.status, contentRange: partial.headers.get('content-range'), text, stalls,
+      firstChunk: new TextDecoder().decode(value),
+    }
+  }, origin)
+  assert.deepEqual(result, {
+    redirectStatus: 302, location: `${origin}/unexpected`, redirectBody: null,
+    partialStatus: 206, contentRange: 'bytes 4-15/16', text: 'resumed body',
+    stalls: [{receivedHeaders: false, error: 'TimeoutError'}, {receivedHeaders: true, error: 'TimeoutError'}],
+    firstChunk: 'partial update response',
+  })
+  assert.equal(range, 'bytes=4-')
+  interruptedSocket.destroy()
+  const interruption = await app.evaluate(() => globalThis.testInterruptedUpdateReader.read().catch(error => error.message))
+  assert.match(interruption, /^net::ERR_(?:CONNECTION_(?:CLOSED|RESET)|CONTENT_LENGTH_MISMATCH)$/)
+  assert.deepEqual(requests.toSorted(), ['/body', '/headers', '/interrupted', '/range', '/redirect'])
+  await expect.poll(() => closed.toSorted()).toEqual(['/body', '/headers'])
+})
+
 test('G07 checks the release, retries a failure and downloads the matching package', {timeout: 40000}, async t => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-update-'))
   const profile = path.join(temp, 'profile')
@@ -136,6 +261,7 @@ test('G07 checks the release, retries a failure and downloads the matching packa
   app = opened.app
   const {page} = opened
   const releaseApi = 'https://api.github.com/repos/peterwangze/margin-editor/releases/latest'
+  const cdn = 'https://release-assets.githubusercontent.com/margin-test-fixture'
   const latest = '99.0.0'
   const notes = 'Find and replace now remembers the previous search.'
   const fixture = 'offline update fixture'
@@ -151,26 +277,30 @@ test('G07 checks the release, retries a failure and downloads the matching packa
     browser_download_url: `https://github.com/peterwangze/margin-editor/releases/download/v${latest}/${name}`,
   }))
   const current = await app.evaluate(({app, shell}, data) => {
+    const {createRequire} = process.getBuiltinModule('node:module')
+    const {join} = process.getBuiltinModule('node:path')
+    const load = createRequire(join(app.getAppPath(), 'package.json'))
+    const updateNetwork = load('./desktop/update-network.cjs')
     app.setPath('downloads', data.downloads)
     globalThis.testUpdateMode = 'current'
     globalThis.testUpdateRequests = []
-    const cdn = 'https://release-assets.githubusercontent.com/margin-test-fixture'
-    globalThis.fetch = async requested => {
+    updateNetwork.updateRequest = async requested => {
       const url = String(requested)
       globalThis.testUpdateRequests.push(url)
       if (globalThis.testUpdateMode === 'failure') throw new Error('Test network unavailable')
       if (url === data.releaseApi) {
-        const release = {tag_name: `v${app.getVersion()}`, draft: false, prerelease: false, body: '', assets: []}
+        const stableVersion = app.getVersion().split(/[+-]/)[0]
+        const release = {tag_name: `v${stableVersion}`, draft: false, prerelease: false, body: '', assets: []}
         if (globalThis.testUpdateMode === 'available') Object.assign(release, {tag_name: `v${data.latest}`, body: data.notes, assets: data.assets})
         return Response.json(release)
       }
-      if (data.assets.some(asset => asset.browser_download_url === url)) return Response.redirect(cdn)
-      if (url === cdn) return new Response(data.fixture)
+      if (data.assets.some(asset => asset.browser_download_url === url)) return Response.redirect(data.cdn)
+      if (url === data.cdn) return new Response(data.fixture)
       return new Response('', {status: 404})
     }
     shell.showItemInFolder = file => { globalThis.shownUpdate = file }
     return app.getVersion()
-  }, {downloads, releaseApi, latest, notes, assets, fixture})
+  }, {downloads, releaseApi, cdn, latest, notes, assets, fixture})
 
   const editor = page.getByRole('textbox', {name: 'Document editor', exact: true})
   await editor.focus()
@@ -178,7 +308,8 @@ test('G07 checks the release, retries a failure and downloads the matching packa
   await page.getByRole('button', {name: `About Margin v${current}`, exact: true}).click()
   await page.getByRole('dialog').getByRole('button', {name: 'Check for updates', exact: true}).click()
   const updater = page.getByRole('dialog', {name: 'Check for updates', exact: true})
-  await expect(updater.getByText('Margin is up to date.', {exact: true})).toBeVisible()
+  const initialStatus = /^\d+\.\d+\.\d+-/.test(current) ? 'An update is available.' : 'Margin is up to date.'
+  await expect(updater.getByText(initialStatus, {exact: true})).toBeVisible()
   await expect(updater.getByRole('button', {name: 'Download update'})).toHaveCount(0)
   await page.keyboard.press('Escape')
 
@@ -201,6 +332,9 @@ test('G07 checks the release, retries a failure and downloads the matching packa
   await expect(show).toBeEnabled()
   const downloaded = path.join(downloads, selectedName)
   assert.equal(await fs.readFile(downloaded, 'utf8'), fixture)
+  assert.deepEqual(await app.evaluate(() => globalThis.testUpdateRequests), [
+    releaseApi, releaseApi, releaseApi, assets.find(asset => asset.name === selectedName).browser_download_url, cdn,
+  ])
   await show.click()
   await expect.poll(() => app.evaluate(() => globalThis.shownUpdate)).toBe(downloaded)
   await page.keyboard.press('Escape')
@@ -410,6 +544,62 @@ test('I05 deleting and undoing a mixed line break restores its exact format', {t
   await page.keyboard.press(`${mod}+s`)
   await expect(page.getByText('Saved mixed.txt', {exact: true})).toBeVisible()
   assert.equal(await fs.readFile(file, 'utf8'), 'a\r\nb!\nc\r\n')
+})
+
+test('I04/I05 finds same-name tabs by path and recovers from a wrong encoding at narrow width', {timeout: 50000}, async t => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'margin-tabs-encoding-'))
+  const profile = path.join(temp, 'profile')
+  const western = path.join(temp, 'western', 'config', 'notes.txt')
+  const imported = path.join(temp, 'imported', 'config', 'notes.txt')
+  const other = Array.from({length: 6}, (_, index) => path.join(temp, `additional-notes-${index + 1}.txt`))
+  const original = Buffer.from([0x63, 0x61, 0x66, 0xe9])
+  await Promise.all([profile, path.dirname(western), path.dirname(imported)].map(folder => fs.mkdir(folder, {recursive: true})))
+  await Promise.all([fs.writeFile(western, original), fs.writeFile(imported, 'separate notes'), ...other.map(file => fs.writeFile(file, 'extra'))])
+  const {app, page} = await launch(profile, [western, ...other, imported])
+  t.after(async () => {
+    await app.close().catch(() => {})
+    await fs.rm(temp, {recursive: true, force: true, maxRetries: 6, retryDelay: 250})
+  })
+  await page.setViewportSize({width: 650, height: 540})
+  const tabs = page.getByRole('tablist')
+  const first = tabs.getByRole('tab', {name: /notes.txt western\/config/})
+  const last = tabs.getByRole('tab', {name: /notes.txt imported\/config/})
+  await expect(first).toHaveCount(1)
+  await expect(last).toHaveAttribute('aria-selected', 'true')
+  await expect(first).not.toBeInViewport()
+  await page.getByRole('button', {name: 'View', exact: true}).click()
+  await page.getByRole('button', {name: 'Toggle explorer'}).click()
+  await expect(last).toBeInViewport({ratio: 1})
+  await page.getByRole('button', {name: 'Hide Explorer'}).click()
+  const editor = page.getByRole('textbox', {name: 'Document editor'})
+  await editor.click()
+  await page.keyboard.insertText('Draft ')
+  await page.getByRole('button', {name: 'Open documents…', exact: true}).click()
+  const picker = page.getByRole('dialog', {name: 'Open Documents'})
+  await expect(picker.getByRole('button', {name: /notes.txt Unsaved.+imported/})).toHaveAttribute('aria-current', 'true')
+  await picker.getByRole('textbox').fill('western notes.txt')
+  await page.keyboard.press('Enter')
+  await expect(first).toHaveAttribute('aria-selected', 'true')
+  await expect(first).toBeInViewport()
+
+  await expect(editor).toHaveText('café')
+  await page.getByRole('button', {name: 'Windows-1252', exact: true}).click()
+  const encoding = page.getByRole('dialog', {name: 'Encoding', exact: true})
+  await expect(encoding.getByRole('button', {name: 'Convert encoding…'})).toBeEnabled()
+  await encoding.getByRole('button', {name: 'Reopen with encoding…'}).click()
+  const reopen = page.getByRole('dialog', {name: 'Reopen with encoding'})
+  await reopen.getByLabel('Interpret disk bytes as').selectOption('UTF-8')
+  await reopen.getByRole('button', {name: 'Apply', exact: true}).click()
+  const warning = page.getByRole('alert').filter({hasText: 'Opened read-only.'})
+  await expect(warning).toBeVisible()
+  await expect(editor).toHaveAttribute('contenteditable', 'false')
+  await warning.getByRole('button', {name: 'Reopen with encoding…'}).click()
+  await reopen.getByLabel('Interpret disk bytes as').selectOption('Windows-1252')
+  await reopen.getByRole('button', {name: 'Apply', exact: true}).click()
+  await expect(warning).toHaveCount(0)
+  await expect(editor).toHaveText('café')
+  await expect(editor).toHaveAttribute('contenteditable', 'true')
+  assert.deepEqual(await fs.readFile(western), original)
 })
 
 test('I05 reopening with a Unicode encoding preserves the BOM and Save a Copy leaves the source alone', {timeout: 45000}, async t => {

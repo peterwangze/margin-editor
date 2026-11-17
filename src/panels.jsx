@@ -38,7 +38,10 @@ export function Palette({mode, items, close, run}) {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setActive(Math.max(0, Math.min(filtered.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))) }
     if (event.key === 'Enter') { event.preventDefault(); select(filtered[index]) }
   }} /></div>
-    <div className="palette-results">{filtered.map((item, i) => <button key={item.id} ref={i === index ? ref : null} className={i === index ? 'active' : ''} onMouseMove={() => setActive(i)} onClick={() => select(item)}><span><strong>{item.label}</strong>{item.detail && <small>{item.detail}</small>}</span><kbd dir="ltr">{shortcutLabel(item.key)}</kbd></button>)}{!filtered.length && <p className="panel-empty">{t('No results')}</p>}</div>
+    <div className="palette-results">{filtered.map((item, i) => <button key={item.id} ref={i === index ? ref : null} className={i === index ? 'active' : ''} aria-current={item.current || undefined} onMouseMove={() => setActive(i)} onClick={() => select(item)}>
+      <span><strong dir="auto">{item.label}</strong>{item.dirty && <span className="dirty-mark palette-dirty" aria-label={t('Unsaved')} title={t('Unsaved')} />}{item.detail && <small className={mode === 'Open Documents' ? 'document-path' : undefined} dir="auto">{item.detail}</small>}</span>
+      {item.current ? <Check className="palette-current" size={16} aria-hidden="true" /> : <kbd dir="ltr">{shortcutLabel(item.key)}</kbd>}
+    </button>)}{!filtered.length && <p className="panel-empty">{t('No results')}</p>}</div>
   </Dialog>
 }
 

@@ -49,6 +49,8 @@ export default {
   'Find Next': 'Найти далее',
   'Searching…': 'Поиск…',
   'Search error': 'Ошибка поиска',
+  'Select text to set the search range.': 'Выделите текст, чтобы задать область поиска.',
+  'Use selection': 'Использовать выделение',
   '{current} of {total}{more}': '{current} из {total}{more}',
   'No matches': 'Совпадений нет',
   'Search options': 'Параметры поиска',

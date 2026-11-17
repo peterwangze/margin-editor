@@ -50,6 +50,8 @@ export default {
   'Find Next': 'Rechercher le suivant',
   'Searching…': 'Recherche en cours…',
   'Search error': 'Erreur de recherche',
+  'Select text to set the search range.': 'Sélectionnez du texte pour définir la zone de recherche.',
+  'Use selection': 'Utiliser la sélection',
   '{current} of {total}{more}': '{current} sur {total}{more}',
   'No matches': 'Aucun résultat',
   'Search options': 'Options de recherche',

@@ -222,8 +222,10 @@ try {
   const chineseFind = page.getByRole('region', {name: '查找与替换'})
   await chineseFind.getByRole('textbox', {name: '查找', exact: true}).fill('original')
   await expect(chineseFind.getByRole('status')).toHaveText('第 1 项，共 1 项')
+  await verifyNarrowChrome('zh-CN')
   await page.screenshot({path: path.join(evidence, `${packageForm}-chinese.png`), animations: 'disabled'})
   await chineseFind.getByRole('button', {name: '关闭查找栏'}).click()
+  await page.setViewportSize({width: 1024, height: 720})
   await chineseEditor.focus()
   await page.keyboard.press('Home')
   await page.keyboard.insertText('草稿 ')
@@ -331,6 +333,7 @@ try {
   await expect(findInput).toHaveValue('offline')
   await expect(replaceInput).toHaveValue('local')
   await expect(page.getByText('1 of 1')).toBeVisible()
+  await verifyNarrowChrome('en')
   await page.screenshot({path: path.join(evidence, `${packageForm}-replace.png`), animations: 'disabled'})
   await page.getByRole('button', {name: 'Replace All'}).click()
   await page.getByRole('button', {name: 'Close find'}).click()
@@ -357,6 +360,8 @@ try {
   await expect(page.getByText('Saved offline.txt', {exact: true})).toBeVisible()
   assert.equal(await fs.readFile(file, 'utf8'), 'local edit\r\n中🙂\r\ncopy this')
 
+  await verifyDocumentWorkflow(toolbar, editor, tab)
+  await page.setViewportSize({width: 1024, height: 720})
   const keywordContrast = await verifySyntaxHighlighting(toolbar, editor, status)
   await tab.press('Enter')
   await expect(tab).toHaveAttribute('aria-selected', 'true')
@@ -369,7 +374,7 @@ try {
   await launch('ja-JP')
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-TW')
   await expect(page.locator('.cm-line')).toHaveText(['local edit', '中🙂', 'copy this'])
-  await verifyLocalizedFind('zh-TW')
+  await verifyNarrowLocalizedFind('zh-TW')
   const traditional = await openAddedSettings('zh-TW', '偏好設定…')
   await expect(traditional).toHaveValue('zh-TW')
   await traditional.selectOption('system')
@@ -377,11 +382,11 @@ try {
   await expect(settingsLanguage('ja')).toHaveValue('system')
   await expectSavedLanguage('system')
   await page.keyboard.press('Escape')
-  await verifyLocalizedFind('ja')
+  await verifyNarrowLocalizedFind('ja')
   await shutdown()
   await launch('ko-KR')
   await expect(page.locator('html')).toHaveAttribute('lang', 'ko')
-  await verifyLocalizedFind('ko')
+  await verifyNarrowLocalizedFind('ko')
   const korean = await openAddedSettings('ko', '환경 설정…')
   await expect(korean).toHaveValue('system')
   await korean.selectOption('ja')
@@ -494,7 +499,7 @@ try {
     interfaceLocales: ['en', 'zh-CN', ...Object.keys(addedLocales)],
     keywordContrast,
     offline: 'Chromium used a loopback-only proxy and renderer HTTP(S) requests were blocked',
-    passed: ['desktop layout', 'narrow window', 'installed version display', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'bundled Cyrillic fonts', 'bundled Arabic and Devanagari fonts', 'CRLF save', 'find and replace', 'localized replacement and undo', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence', 'rtl interface and document direction', 'automatic syntax detection', 'syntax keyword contrast', 'scope keyword matching'],
+    passed: ['desktop layout', 'narrow window', 'narrow toolbar and find across all interface languages', 'open documents and selection-only replace', 'installed version display', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'bundled Cyrillic fonts', 'bundled Arabic and Devanagari fonts', 'CRLF save', 'find and replace', 'localized replacement and undo', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence', 'rtl interface and document direction', 'automatic syntax detection', 'syntax keyword contrast', 'scope keyword matching'],
   }, null, 2) + '\n')
   console.log(`${packageForm}: layout, version display, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup, undo, interface language persistence, RTL and syntax passed`)
 } catch (error) {
@@ -524,6 +529,69 @@ async function verifyLocalizedFind(locale, beforeClose) {
   await expect(page.locator('.search-hit')).toHaveText('copy this')
   await beforeClose?.(region)
   await region.getByRole('button', {name: labels.closeFind, exact: true}).click()
+}
+
+async function verifyNarrowChrome(locale) {
+  await page.evaluate(() => document.fonts.ready)
+  for (const width of [1024, 901, 760, 700, 650]) {
+    await page.setViewportSize({width, height: 540})
+    const layout = await page.evaluate(() => {
+      const fits = (container, selector) => {
+        const node = document.querySelector(container)
+        const bounds = node.getBoundingClientRect()
+        if (node.scrollWidth > node.clientWidth + 1) return false
+        return [...node.querySelectorAll(selector)].every(element => {
+          const box = element.getBoundingClientRect()
+          return box.width > 0 && box.left >= Math.max(0, bounds.left) - 1 && box.right <= Math.min(innerWidth, bounds.right) + 1
+        })
+      }
+      return {
+        menu: fits('.menu-bar', '.menu-group > button'),
+        toolbar: fits('.toolbar', 'button.tool-core > span') && document.querySelectorAll('.toolbar button.tool-core').length === 5,
+        search: fits('.findbar', 'button, input, label, .find-scope-label'),
+      }
+    })
+    assert.deepEqual(layout, {menu: true, toolbar: true, search: true}, `Menus, labelled tools and find controls fit a ${width}px window in ${locale}`)
+    if (width === 650) await expect(page.locator('.find-scope input')).toBeInViewport({ratio: 1})
+  }
+}
+
+async function verifyDocumentWorkflow(toolbar, editor, savedTab) {
+  await toolbar.getByRole('button', {name: 'New document', exact: true}).click()
+  const scratch = page.getByRole('tab', {name: /^Untitled/}).last()
+  await expect(scratch).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.insertText('needle needle')
+  await editor.press('Home')
+  for (let index = 0; index < 'needle'.length; index++) await page.keyboard.press('Shift+ArrowRight')
+  await toolbar.getByRole('button', {name: 'Replace', exact: true}).click()
+  const find = page.getByRole('region', {name: 'Find and replace'})
+  await find.getByRole('textbox', {name: 'Find', exact: true}).fill('needle')
+  await find.getByRole('textbox', {name: 'Replace', exact: true}).fill('target')
+  const scope = find.getByRole('checkbox', {name: 'In selection'})
+  await scope.check()
+  const replaceAll = find.getByRole('button', {name: 'Replace All', exact: true})
+  await expect(find.getByRole('status')).toHaveText('1 of 1')
+  await expect(replaceAll).toBeEnabled()
+  await page.screenshot({path: path.join(evidence, `${packageForm}-find-selection.png`), animations: 'disabled'})
+
+  await page.getByRole('button', {name: 'Open documents…', exact: true}).click()
+  const documents = page.getByRole('dialog', {name: 'Open Documents', exact: true})
+  await expect(documents.getByText(path.basename(file), {exact: true})).toBeVisible()
+  await page.screenshot({path: path.join(evidence, `${packageForm}-open-documents.png`), animations: 'disabled'})
+  const filter = documents.getByRole('textbox', {name: 'Filter open documents'})
+  await filter.fill(path.basename(file))
+  await filter.press('Enter')
+  await expect(savedTab).toHaveAttribute('aria-selected', 'true')
+  await expect(find.getByRole('alert')).toHaveText('Select text to set the search range.')
+  await expect(replaceAll).toBeDisabled()
+  await scratch.click()
+  await expect(replaceAll).toBeEnabled()
+  await replaceAll.click()
+  await expect(editor).toHaveText('target needle')
+  await scope.uncheck()
+  await find.getByRole('button', {name: 'Close find', exact: true}).click()
+  await savedTab.click()
+  await expect(page.locator('.cm-line')).toHaveText(savedLines)
 }
 
 async function assertHorizontalOrder(first, second, description) {
@@ -811,23 +879,9 @@ async function verifyRtlSettings(mixedText) {
 
 async function verifyNarrowLocalizedFind(locale, replacement, afterReplace) {
   const labels = addedLocales[locale]
-  await page.evaluate(() => document.fonts.ready)
   await page.setViewportSize({width: 650, height: 540})
   await verifyLocalizedFind(locale, async region => {
-    const menu = page.getByRole('navigation')
-    for (const width of [1024, 901, 760, 650]) {
-      await page.setViewportSize({width, height: 540})
-      for (const [element, label] of [[menu, 'menu'], [region, 'find bar']]) {
-        const overflow = await element.evaluate(node => {
-          const rect = node.getBoundingClientRect()
-          const left = Math.max(rect.left, 0)
-          const right = Math.min(rect.right, innerWidth)
-          const children = [...node.children].map(child => child.getBoundingClientRect())
-          return Math.max(node.scrollWidth - node.clientWidth, ...children.flatMap(child => [left - child.left, child.right - right]))
-        })
-        assert.ok(overflow <= 1, `The ${label} fits a ${width}px window in ${locale} (${overflow}px overflow)`)
-      }
-    }
+    await verifyNarrowChrome(locale)
     const find = region.getByRole('textbox', {name: labels.find, exact: true})
     if (labels.direction === 'rtl') {
       await expect(region).toHaveCSS('direction', 'rtl')

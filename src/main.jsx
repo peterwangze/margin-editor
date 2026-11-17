@@ -58,7 +58,11 @@ function App() {
   const primaryMode = useSyntaxMode(primaryDoc, m.settings.languages)
   const secondaryMode = useSyntaxMode(secondaryDoc, m.settings.languages)
   const mode = m.slot === 'secondary' && secondaryDoc ? secondaryMode : primaryMode
-  const find = useFind(m.doc, m.selectedView, notify)
+  const findView = () => {
+    const editor = m.views.current[m.slot]
+    return editor?.id === m.doc.id ? editor.view : null
+  }
+  const find = useFind(m.doc, findView, notify, m.slot)
   const [panel, setPanel] = useState('')
   const [dialog, setDialog] = useState(null)
   const [context, setContext] = useState(null)
@@ -156,9 +160,9 @@ function App() {
 
   const openDocumentsSearch = () => setDialog({kind: 'open-search'})
   const commands = useCommands({model: m, api, find, notify, setPanel, setDialog, setOutput, setCompanion, setTail, setMinimap, setSync, clip, recorded, recording, setRecording, setTheme, download, pickImport, languageNames, openDocumentsSearch})
-  const invoke = id => {
+  const invoke = (id, ...args) => {
     if (id === 'palette') return palette()
-    if (commands[id] && !commands[id].disabled) return safe(commands[id].action)
+    if (commands[id] && !commands[id].disabled) return safe(() => commands[id].action(...args))
   }
   keyHandler.current = event => {
     if (event.defaultPrevented || event.isComposing || event.getModifierState('AltGraph')) return
@@ -267,7 +271,12 @@ function App() {
   function viewPane(slot, doc, mode) {
     const active = m.slot === slot
     return <section className={`editor-pane ${active ? 'active-pane' : ''}`} aria-label={t(slot === 'main' ? 'Primary editor' : 'Secondary editor')}>
-      <Tabs docs={m.docs} active={doc.id} focus={id => m.focus(id, slot)} close={id => safe(() => m.close([id]))} add={() => invoke('new')} reorder={m.reorder} context={(doc, x, y) => setContext({doc, x, y})} pane={slot} />
+      <Tabs docs={m.docs} active={doc.id} focus={id => m.focus(id, slot)} close={id => safe(() => m.close([id]))} add={() => invoke('new')} list={() => invoke('documents', slot)} reorder={m.reorder} context={(doc, x, y) => setContext({doc, x, y})} pane={slot} />
+      {active && doc.lossy && !doc.large && <div className="conflict" role="alert">
+        <AlertTriangle size={15} aria-hidden="true" />
+        <span>{t('This encoding could not decode the file losslessly. Opened read-only.')}</span>
+        <button className="outline-button" onClick={() => invoke('reinterpret')}>{commands.reinterpret.label}</button>
+      </div>}
       {active && doc.external && <div className="conflict" role="alert">
         <AlertTriangle size={15} />
         <span>{t(doc.external.missing ? 'File moved or removed on disk.' : 'File changed on disk.')}</span>
@@ -320,7 +329,7 @@ function App() {
       })} />}
       {panel === 'search' && <WorkspaceSearch api={api} workspace={m.workspace} chooseFolder={() => invoke('openFolder')} openPath={(...args) => safe(() => m.openPath(...args))} docs={m.docs} notify={notify} reload={reloadFiles} hide={() => setPanel('')} />}
       <div className="central"><div className="editing-area"><div className={`panes ${m.split}`}>{viewPane('main', primaryDoc, primaryMode)}{secondaryDoc && viewPane('secondary', secondaryDoc, secondaryMode)}</div>{companion && <Companion mode={companion} doc={m.doc} direction={(m.doc.rtl ?? m.settings.rtl) ? 'rtl' : 'ltr'} close={() => setCompanion('')} />}</div>{output && <Output data={output} close={() => setOutput(null)} />}
-        {find.show && <FindBar query={find.query} change={find.change} replace={find.show === 'replace'} result={find.result} index={find.index} next={find.next} apply={find.apply} close={find.close} mark={() => invoke('markMatches')} options={() => invoke('searchOptions')} input={find.input} />}</div>
+        {find.show && <FindBar find={find} paged={Boolean(m.doc.large)} mark={() => invoke('markMatches')} options={() => invoke('searchOptions')} />}</div>
     </main>
     <footer className="status-bar" aria-label={t('Document status')}><div className="status-file" title={m.doc.path ?? documentTitle(m.doc, t)}>
       <FileGlyph name={m.doc.name} size={14} />
@@ -333,7 +342,7 @@ function App() {
       <span className="status-metric">{t('Lines: {count}', {count: formatNumber(status.lines)})}</span>
       <button onClick={() => invoke('goto')} title={t('Go to line')}>{t('Ln {line}, Col {column}', {line: formatNumber(status.line), column: formatNumber(status.col)})}{status.count ? t(' ({count} selected)', {count: formatNumber(status.count)}) : ''}</button>
       <button onClick={() => setDialog({kind: 'palette', label: 'Line Endings', items: ['LF', 'CRLF', 'CR'].map(label => ({id: label, label})), run: item => invoke(item.id.toLowerCase())})} title={t('Line endings')}>{m.doc.mixed ? t('Mixed ({eol})', {eol: m.doc.eol}) : m.doc.eol}</button>
-      <button onClick={() => invoke('convert')} title={t('Convert encoding')}>{m.doc.encoding}</button>
+      <button onClick={() => setDialog({kind: 'encoding'})} title={t('Encoding')} aria-haspopup="dialog">{m.doc.encoding}<ChevronDown size={12} aria-hidden="true" /></button>
       <button onClick={() => invoke('language')} title={t('Select language')}>{mode?.name ?? t('Plain Text')}</button>
       <button onClick={() => invoke('settings')} title={t('Indentation')}>{t(m.settings.spaces ? 'Spaces: {size}' : 'Tabs: {size}', {size: m.settings.tabSize})}</button>
       <button onClick={() => invoke('zoomReset')} title={t('Reset editor zoom')}><bdi>{Math.round(m.settings.fontSize / 15 * 100)}%</bdi></button>
@@ -352,6 +361,11 @@ function App() {
     </div></div>}
     {dialog?.kind === 'palette' && <Palette key={dialog.label} mode={dialog.label} items={dialog.items} close={closeDialog} run={item => safe(() => dialog.run(item))} />}
     {dialog?.kind === 'fields' && <Fields key={dialog.label} {...dialog} close={closeDialog} />}
+    {dialog?.kind === 'encoding' && <Dialog label="Encoding" close={closeDialog}>
+      <div className="encoding-actions">
+        {['reinterpret', 'convert'].map(id => <button key={id} type="button" className="outline-button" data-focus={id === (commands.reinterpret.disabled ? 'convert' : 'reinterpret') || undefined} disabled={commands[id].disabled} onClick={() => invoke(id)}>{commands[id].label}</button>)}
+      </div>
+    </Dialog>}
     {dialog?.kind === 'settings' && <Settings settings={m.settings} change={changeSettings} close={closeDialog} keybindings={() => invoke('keybindings')} customLanguage={() => invoke('customLanguage')} tools={() => invoke('tools')} />}
     {dialog?.kind === 'about' && <Dialog label="About Margin" close={closeDialog}>
       <div className="form">

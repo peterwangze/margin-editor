@@ -49,6 +49,8 @@ export default {
   'Find Next': 'Buscar siguiente',
   'Searching…': 'Buscando…',
   'Search error': 'Error de búsqueda',
+  'Select text to set the search range.': 'Selecciona el texto donde quieres buscar.',
+  'Use selection': 'Usar selección',
   '{current} of {total}{more}': '{current} de {total}{more}',
   'No matches': 'Sin coincidencias',
   'Search options': 'Opciones de búsqueda',

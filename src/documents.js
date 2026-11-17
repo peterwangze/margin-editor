@@ -57,6 +57,32 @@ export const demoDocuments = () => Object.entries(samples).map(([name, text]) =>
 export const basename = path => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
 export const dirname = path => path.replace(/[\\/][^\\/]*$/, '')
 
+export function tabFolders(docs) {
+  const groups = new Map()
+  const labels = new Map()
+  for (const doc of docs) {
+    if (!doc.path) continue
+    const name = doc.name.toLowerCase()
+    const group = groups.get(name) ?? []
+    group.push(doc)
+    groups.set(name, group)
+  }
+  for (const group of groups.values()) {
+    if (group.length < 2) continue
+    const folders = group.map(doc => dirname(doc.path).split(/[\\/]/).filter(Boolean))
+    for (const [index, parts] of folders.entries()) {
+      let label = dirname(group[index].path) || '/'
+      for (let depth = 1; depth <= parts.length; depth++) {
+        const suffix = parts.slice(-depth).join('/')
+        const duplicate = folders.some((other, i) => i !== index && other.slice(-depth).join('/') === suffix)
+        if (!duplicate) { label = suffix; break }
+      }
+      labels.set(group[index].id, label)
+    }
+  }
+  return labels
+}
+
 export function browserSession() {
   try { return JSON.parse(localStorage.getItem('margin.session.v1')) }
   catch { return null }

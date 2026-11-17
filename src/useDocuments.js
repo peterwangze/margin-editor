@@ -111,7 +111,6 @@ export function useDocuments(api, notify) {
     const location = line ? {line, column} : undefined
     if (existing) focus(existing.id, slot, location)
     else add(documentFor(result.name, result.text, {...result, readOnly: Boolean(result.lossy || result.readOnly)}), location)
-    if (result.lossy && !result.large) notify(t('Opened read-only. Reopen with another encoding to edit the original bytes.'))
     remember(result.path)
   }
 
@@ -186,7 +185,6 @@ export function useDocuments(api, notify) {
     }
     if (result.binary && !result.large) throw new Error('That encoding produced NUL bytes. Choose another encoding.')
     amend(doc.id, item => ({...result, positions: undefined, epoch: (item.epoch ?? 0) + 1, large: result.large ?? null, savedText: result.text, savedFormat: [result.encoding, result.eol, result.mixed], dirty: false, external: null, readOnly: Boolean(result.lossy || result.readOnly)}))
-    if (result.lossy && !result.large) notify(t('This encoding could not decode the file losslessly. Opened read-only.'))
   }
 
   async function readPage(doc, index, selection) {

@@ -49,6 +49,8 @@ export default {
   'Find Next': 'Cari berikutnya',
   'Searching…': 'Mencari…',
   'Search error': 'Kesalahan pencarian',
+  'Select text to set the search range.': 'Pilih teks untuk menentukan cakupan pencarian.',
+  'Use selection': 'Gunakan teks terpilih',
   '{current} of {total}{more}': '{current} dari {total}{more}',
   'No matches': 'Tidak ada kecocokan',
   'Search options': 'Opsi pencarian',

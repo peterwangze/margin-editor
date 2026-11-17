@@ -49,6 +49,8 @@ export default {
   'Find Next': '查找下一个',
   'Searching…': '正在查找…',
   'Search error': '搜索出错',
+  'Select text to set the search range.': '选择文本以设置查找范围。',
+  'Use selection': '使用选区',
   '{current} of {total}{more}': '第 {current} 项，共 {total}{more} 项',
   'No matches': '无匹配项',
   'Search options': '搜索选项',
