@@ -494,7 +494,7 @@ try {
     interfaceLocales: ['en', 'zh-CN', ...Object.keys(addedLocales)],
     keywordContrast,
     offline: 'Chromium used a loopback-only proxy and renderer HTTP(S) requests were blocked',
-    passed: ['desktop layout', 'narrow window', 'installed version display', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'bundled Cyrillic fonts', 'bundled Arabic and Devanagari fonts', 'CRLF save', 'find and replace', 'localized replacement and undo', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence', 'rtl interface and document direction', 'automatic syntax detection', 'syntax keyword contrast'],
+    passed: ['desktop layout', 'narrow window', 'installed version display', 'keyboard menu focus', 'CLI open', 'Unicode edit', 'bundled Han font', 'bundled Cyrillic fonts', 'bundled Arabic and Devanagari fonts', 'CRLF save', 'find and replace', 'localized replacement and undo', 'inspect and clean', 'undo and redo', 'disk byte verification', 'interface language and persistence', 'rtl interface and document direction', 'automatic syntax detection', 'syntax keyword contrast', 'scope keyword matching'],
   }, null, 2) + '\n')
   console.log(`${packageForm}: layout, version display, keyboard, CLI open, Unicode edit, save, CRLF bytes, replace, cleanup, undo, interface language persistence, RTL and syntax passed`)
 } catch (error) {
@@ -563,6 +563,7 @@ async function verifySyntaxHighlighting(toolbar, editor, status) {
   ]
   const syntax = status.getByTitle('Select language', {exact: true})
   const canvas = page.locator('.editor-surface')
+  const syntaxTokens = canvas.locator('.cm-line span:not(.cm-matchingScopeKeyword, .cm-nonmatchingScopeKeyword)')
   const appearance = page.getByRole('dialog', {name: 'Settings', exact: true}).getByRole('combobox', {name: 'Appearance', exact: true})
   const selectAll = process.platform === 'darwin' ? 'Meta+a' : 'Control+a'
   const selectSyntax = async name => {
@@ -584,7 +585,7 @@ async function verifySyntaxHighlighting(toolbar, editor, status) {
   const contrasts = {}
   for (const sample of samples) {
     const name = sample.mode.toLowerCase()
-    const keyword = canvas.locator('.cm-line span').filter({hasText: new RegExp(`^${sample.keyword}$`)})
+    const keyword = syntaxTokens.filter({hasText: new RegExp(`^${sample.keyword}$`)})
     await editor.focus()
     await page.keyboard.press(selectAll)
     await page.keyboard.insertText(sample.source)
@@ -639,11 +640,13 @@ async function verifySyntaxHighlighting(toolbar, editor, status) {
   await page.keyboard.insertText('\n# Manual mode')
   await expect(canvas.locator('.cm-line').last()).toHaveText('# Manual mode')
   await expect(syntax).toHaveText('Plain Text')
-  const pythonKeyword = canvas.locator('.cm-line span').filter({hasText: /^def$/})
+  const pythonKeyword = syntaxTokens.filter({hasText: /^def$/})
   await expect(pythonKeyword).toHaveCount(0)
   await selectSyntax('Automatic')
   await expect(syntax).toHaveText('Python')
   await expect(pythonKeyword).toBeVisible()
+
+  await verifyScopeKeywordMatching(editor, canvas, syntax, selectAll)
 
   await openLanguageSettings(false)
   await appearance.selectOption(originalTheme)
@@ -654,6 +657,76 @@ async function verifySyntaxHighlighting(toolbar, editor, status) {
   await expect(page.locator('.tab.selected .dirty-mark')).toHaveCount(0)
   await page.locator('.tab.selected').getByRole('button', {name: /^Close Untitled \d+$/}).press('Enter')
   return contrasts
+}
+
+async function verifyScopeKeywordMatching(editor, canvas, syntax, selectAll) {
+  const matched = '.cm-matchingScopeKeyword'
+  const unmatched = '.cm-nonmatchingScopeKeyword'
+  const lines = canvas.locator('.cm-line')
+  const replaceText = async text => {
+    await editor.focus()
+    await page.keyboard.press(selectAll)
+    await page.keyboard.insertText(text)
+  }
+  const goTo = async (line, column) => {
+    await page.getByTitle('Go to line', {exact: true}).press('Enter')
+    const dialog = page.getByRole('dialog', {name: 'Go to line', exact: true})
+    await dialog.getByLabel('Line', {exact: true}).fill(String(line))
+    await dialog.getByLabel('Column', {exact: true}).fill(String(column))
+    await dialog.getByRole('button', {name: 'Apply', exact: true}).press('Enter')
+    await expect(editor).toBeFocused()
+  }
+  const verilog = [
+    'module demo;',
+    '  initial begin',
+    '    $display("end begin");',
+    '    // begin end',
+    '    if (ready) begin',
+    '      payload = 1;',
+    '    end',
+    '  end',
+    'endmodule',
+  ]
+  await replaceText(verilog.join('\n'))
+  await expect(syntax).toHaveText('Verilog')
+  await goTo(7, verilog[6].indexOf('end') + 2)
+  await expect(lines.nth(4).locator(matched)).toHaveText('begin')
+  await expect(lines.nth(6).locator(matched)).toHaveText('end')
+  await expect(canvas.locator(matched)).toHaveCount(2)
+  await expect(lines.nth(4).locator(matched)).toHaveCSS('outline-style', 'solid')
+  await canvas.screenshot({path: path.join(evidence, `${packageForm}-scope-match.png`), animations: 'disabled'})
+
+  for (const [row, word] of [[2, 'end'], [3, 'begin']]) {
+    await goTo(row + 1, verilog[row].indexOf(word) + 2)
+    await expect(canvas.locator(matched)).toHaveCount(0)
+    await expect(canvas.locator(unmatched)).toHaveCount(0)
+  }
+  await goTo(5, verilog[4].indexOf('(') + 2)
+  const brackets = canvas.locator('.cm-matchingBracket')
+  await expect(brackets).toHaveText(['(', ')'])
+  await expect(brackets.first()).toHaveCSS('outline-style', 'solid')
+
+  await goTo(8, 3)
+  for (let offset = 0; offset < 'end'.length; offset++) await page.keyboard.press('Delete')
+  await expect(lines.nth(7)).toHaveText('')
+  await goTo(2, verilog[1].indexOf('begin') + 2)
+  const missing = lines.nth(1).locator(unmatched)
+  await expect(missing).toHaveText('begin')
+  await expect(missing).toHaveCSS('outline-style', 'dashed')
+  await canvas.screenshot({path: path.join(evidence, `${packageForm}-scope-missing.png`), animations: 'disabled'})
+
+  await goTo(8, 3)
+  await page.keyboard.insertText('end')
+  await goTo(2, verilog[1].indexOf('begin') + 2)
+  await expect(lines.nth(1).locator(matched)).toHaveText('begin')
+  await expect(lines.nth(7).locator(matched)).toHaveText('end')
+  await expect(canvas.locator(unmatched)).toHaveCount(0)
+
+  await replaceText('#!/bin/sh\nif true; then\n  echo ready\nfi')
+  await expect(syntax).toHaveText('Shell')
+  await goTo(2, 2)
+  await expect(canvas.locator(matched)).toHaveText(['if', 'fi'])
+  await expect(canvas.locator(unmatched)).toHaveCount(0)
 }
 
 async function verifyRtlMenu() {

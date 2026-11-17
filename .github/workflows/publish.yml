@@ -49,7 +49,7 @@ jobs:
             local platform=$1 arch=$2 form=$3 node_platform=$4
             local dir="evidence/acceptance-$platform-$arch"
             test -s "$dir/package-checks.txt"
-            for screenshot in editor version replace inspect language chinese zh-TW ja ko fr de es it pt ru ar hi id find-fr find-de find-es find-it find-pt find-ru find-ar find-hi find-id verilog-light verilog-dark python-light python-dark; do
+            for screenshot in editor version replace inspect language chinese zh-TW ja ko fr de es it pt ru ar hi id find-fr find-de find-es find-it find-pt find-ru find-ar find-hi find-id verilog-light verilog-dark python-light python-dark scope-match scope-missing; do
               test -s "$dir/$form-$screenshot.png"
             done
             jq -e --arg platform "$node_platform" --arg arch "$arch" --arg form "$form" --arg version "$version" '
@@ -63,7 +63,8 @@ jobs:
                 index("localized replacement and undo") != null and index("rtl interface and document direction") != null and
                 index("inspect and clean") != null and index("disk byte verification") != null and
                 index("interface language and persistence") != null and
-                index("automatic syntax detection") != null and index("syntax keyword contrast") != null)
+                index("automatic syntax detection") != null and index("syntax keyword contrast") != null and
+                index("scope keyword matching") != null)
             ' "$dir/$form.json"
           }
           verify_upgrade() {

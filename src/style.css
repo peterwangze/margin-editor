@@ -245,7 +245,8 @@ svg { flex: none; vertical-align: middle; stroke-width: 1.65; }
 .cm-editor .cm-foldGutter .cm-gutterElement { padding: 0 2px; }
 .cm-editor .cm-selectionBackground, .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-editor .cm-content ::selection { background: var(--selection); }
 .cm-editor .cm-cursor { border-left-color: var(--accent-strong); }
-.cm-editor .cm-matchingBracket { background: var(--selection); outline: 1px solid var(--accent); }
+.cm-editor .cm-matchingBracket, .cm-editor .cm-matchingScopeKeyword { background: var(--selection); outline: 1px solid var(--accent); }
+.cm-editor .cm-nonmatchingScopeKeyword { background: color-mix(in srgb, var(--danger) 16%, transparent); outline: 1px dashed var(--danger); }
 .cm-editor .cm-tooltip { background: var(--chrome); color: var(--text); border: 1px solid var(--line); }
 .cm-editor .cm-tooltip-autocomplete ul li[aria-selected] { background: var(--selection); color: var(--text); }
 .cm-editor .cm-selectionMatch { background: var(--active); }

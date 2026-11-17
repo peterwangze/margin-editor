@@ -10,6 +10,7 @@ import '@fontsource/ibm-plex-mono/latin-600.css'
 import {updateMixed} from '../shared/text.mjs'
 import {udlMode} from './notepad-udl'
 import {useLocale} from './i18n'
+import {scopeKeywordMatching} from './scope-keyword-matching'
 
 export const syntax = syntaxHighlighting(HighlightStyle.define([
   {tag: [tags.propertyName, tags.heading], color: 'var(--token-key)'},
@@ -254,7 +255,7 @@ export function EditorSurface({doc, mode, settings, slot, attach, onEdit, onCurs
       if (effects.length) view.dispatch({effects})
     }
     if (doc.size > 2 * 1024 * 1024 || !mode) apply([])
-    else if (mode.load) mode.load().then(apply).catch(() => apply([]))
+    else if (mode.load) mode.load().then(support => apply([support, scopeKeywordMatching(mode.name)])).catch(() => apply([]))
     else apply(customMode(mode))
     return () => { alive = false }
   }, [doc.id, doc.epoch, doc.size, mode, slot])

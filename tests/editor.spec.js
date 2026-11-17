@@ -12,6 +12,15 @@ async function command(page, name) {
   await page.getByRole('dialog').getByRole('button', {name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)}).click()
 }
 
+async function goToEditorPosition(page, line, column) {
+  await page.getByTitle('Go to line', {exact: true}).click()
+  const dialog = page.getByRole('dialog', {name: 'Go to line', exact: true})
+  await dialog.getByLabel('Line', {exact: true}).fill(String(line))
+  await dialog.getByLabel('Column', {exact: true}).fill(String(column))
+  await dialog.getByRole('button', {name: 'Apply', exact: true}).click()
+  await expect(editor(page)).toBeFocused()
+}
+
 test.beforeEach(async ({page}) => { await page.goto('/'); await expect(editor(page)).toBeVisible() })
 
 test('L02 applies the system language and preserves editor state on language switches', async ({browser}, testInfo) => {
@@ -231,7 +240,8 @@ test('I09 imports a remapped Notepad++ shortcut and reports conflicts', async ({
 
 test('I06 detects Verilog, preserves an explicit choice and shares readable syntax colors', async ({page}) => {
   const syntax = page.locator('.status-controls').getByTitle('Select language', {exact: true})
-  const keyword = page.locator('.cm-line span').filter({hasText: /^module$/})
+  const syntaxTokens = page.locator('.cm-line span:not(.cm-matchingScopeKeyword, .cm-nonmatchingScopeKeyword)')
+  const keyword = syntaxTokens.filter({hasText: /^module$/})
   const prose = 'The module is ready. Please document the endmodule keyword.'
   const source = 'module gates(input left, input right, output result);\n  assign result = left & right;\nendmodule'
   const choose = async name => {
@@ -328,8 +338,86 @@ test('I06 detects Verilog, preserves an explicit choice and shares readable synt
       name: example.name, mimeType: 'text/plain', buffer: Buffer.from(example.source),
     })
     await expect(syntax).toHaveText(example.mode)
-    await verifyThemes(page.locator('.cm-line span').filter({hasText: example.keyword}))
+    await verifyThemes(syntaxTokens.filter({hasText: example.keyword}))
   }
+})
+
+test('I06 matches nested scope keywords and compound closers at the caret', async ({page}) => {
+  const syntax = page.locator('.status-controls').getByTitle('Select language', {exact: true})
+  const matched = '.cm-matchingScopeKeyword'
+  const unmatched = '.cm-nonmatchingScopeKeyword'
+  const marks = page.locator(matched)
+  const changeText = async source => {
+    await editor(page).focus()
+    await page.keyboard.press(`${control}+a`)
+    await page.keyboard.insertText(source)
+  }
+  const rows = [
+    'module demo;',
+    '  initial begin',
+    '    $display("end begin");',
+    '    // begin end',
+    '    if (ready) begin',
+    '      payload = 1;',
+    '    end',
+    '  end',
+    'endmodule',
+  ]
+  await page.keyboard.insertText(rows.join('\n'))
+  await expect(syntax).toHaveText('Verilog')
+
+  await goToEditorPosition(page, 2, rows[1].indexOf('begin') + 1)
+  await expect(marks).toHaveText(['begin', 'end'])
+  await expect(lines(page).nth(7).locator(matched)).toHaveText('end')
+
+  await goToEditorPosition(page, 7, rows[6].indexOf('end') + 2)
+  await expect(lines(page).nth(4).locator(matched)).toHaveText('begin')
+  await expect(lines(page).nth(6).locator(matched)).toHaveText('end')
+  await expect(lines(page).nth(7).locator(matched)).toHaveCount(0)
+
+  await goToEditorPosition(page, 4, rows[3].indexOf('begin') + 2)
+  await expect(marks).toHaveCount(0)
+  await expect(page.locator(unmatched)).toHaveCount(0)
+  await goToEditorPosition(page, 1, 2)
+  await expect(marks).toHaveText(['module', 'endmodule'])
+  await goToEditorPosition(page, 3, rows[2].indexOf('end') + 2)
+  await expect(marks).toHaveCount(0)
+  await expect(page.locator(unmatched)).toHaveCount(0)
+
+  await goToEditorPosition(page, 5, rows[4].indexOf('(') + 2)
+  const brackets = page.locator('.cm-matchingBracket')
+  await expect(brackets).toHaveText(['(', ')'])
+  await expect(brackets.first()).toHaveCSS('outline-style', 'solid')
+
+  await changeText('module demo;\n  initial begin\n')
+  await goToEditorPosition(page, 2, rows[1].indexOf('begin') + 2)
+  await expect(lines(page).nth(1).locator(unmatched)).toHaveText('begin')
+  await goToEditorPosition(page, 3, 1)
+  await page.keyboard.insertText('  end\nendmodule')
+  await goToEditorPosition(page, 2, rows[1].indexOf('begin') + 2)
+  await expect(marks).toHaveText(['begin', 'end'])
+  await expect(page.locator(unmatched)).toHaveCount(0)
+
+  await changeText('module demo;\n  end\nendmodule')
+  await goToEditorPosition(page, 2, 4)
+  await expect(lines(page).nth(1).locator(unmatched)).toHaveText('end')
+
+  await changeText('#!/bin/sh\nif true; then\n  echo ready\nfi')
+  await expect(syntax).toHaveText('Shell')
+  await goToEditorPosition(page, 2, 2)
+  await expect(marks).toHaveText(['if', 'fi'])
+  await expect(page.locator(unmatched)).toHaveCount(0)
+
+  await syntax.click()
+  const picker = page.getByRole('dialog', {name: 'Select Language', exact: true})
+  await picker.getByRole('textbox', {name: 'Filter select language'}).fill('VHDL')
+  await picker.getByRole('button', {name: 'VHDL', exact: true}).click()
+  await expect(syntax).toHaveText('VHDL')
+  await changeText('process (clk)\nbegin\n  IF rising_edge(clk) THEN\n    value <= data;\n  END IF;\nend process;')
+  await goToEditorPosition(page, 5, 8)
+  await expect(lines(page).nth(2).locator(matched)).toHaveText('IF')
+  await expect.poll(async () => (await lines(page).nth(4).locator(matched).allTextContents()).join('')).toBe('END IF')
+  await expect(page.locator(unmatched)).toHaveCount(0)
 })
 
 test('I06 imports UDL keyword colors, comments, operators, delimiters and folds', async ({page}) => {
