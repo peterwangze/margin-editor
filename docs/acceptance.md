@@ -66,6 +66,17 @@ F01–F12 是早期迁移对照，保留子项和历史结果。当前产品承�
 
 安装包的 CI 通过表示已生成工件，带 Smoke 步骤的架构还验证了包内应用的真实编辑与磁盘操作。完整安装程序、系统文件关联和卸载用例需要独立证据。
 
+## v1.10.0 执行记录
+
+发行提交 `45236a3181fffb460dbf45019b9ab3237bb49c9a`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/44202693553) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/44205931720) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.10.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.10.0/ACCEPTANCE.zip)
+
+| 范围 | 状态 | 已观察的结果 |
+| --- | --- | --- |
+| G01–G04、G06、G09–G11 | 通过 | Windows、macOS、Linux 的 x64 和 ARM64 六组原生环境完成 12 个离线包的静态与实际操作验收。各包均验证了 14 种界面语言的窄窗工具栏和查找栏、文档列表筛选以及选区替换保护。桌面回归覆盖同名文件和乱码恢复，并核对了原文件字节。 |
+| G07 | 通过 | 三平台原生回归验证了代理路由、GitHub 下载跳转、响应超时、断线处理和完整性校验。在本机 Windows 系统代理下，从实际界面读取了 GitHub 最新发行信息。另使用候选版的更新模块下载公开的 1.9.0 安装包，在 16 MiB 处模拟中断，实际 CDN 返回 206，续传后 126,632,620 字节与发布 SHA-256 一致。 |
+| G08 | 通过 | 从当前源码构建的 1.6.99 测试包原生升级到十种发行包，安装并重启后恢复打开的文件、未保存的草稿和设置。 |
+| G05 | 通过 | v1.10.0 已设为 GitHub 正式最新版。12 个离线包和验收档案的 13 条 SHA-256 与 GitHub 资产摘要一致。验收档案包含 12 份包级报告与 10 份原生升级报告。 |
+
 ## v1.9.0 执行记录
 
 发行提交 `6f0db82e97d10ffd54a8ba1f7a80f9d62c0c5536`。[三平台构建与验收](https://github.com/peterwangze/margin-editor/actions/runs/43984808360) · [发布校验](https://github.com/peterwangze/margin-editor/actions/runs/43988609671) · [正式发行页](https://github.com/peterwangze/margin-editor/releases/tag/v1.9.0) · [验收截图与结果](https://github.com/peterwangze/margin-editor/releases/download/v1.9.0/ACCEPTANCE.zip)
